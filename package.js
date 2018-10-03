@@ -3,8 +3,8 @@
 Package.describe({
     name: 'communitypackages:react-router-ssr',
     version: '1.0.0',
-    summary: 'Simple Isomorphic SSR for Meteor',
-    git: 'https://github.com/copleykj/meteor-react-router-ssr.git',
+    summary: 'Simple isomorphic React SSR for Meteor with subscribed data re-hydration',
+    git: 'https://github.com/Meteor-Community-Packages/react-router-ssr.git',
     documentation: 'README.md',
 });
 
@@ -17,6 +17,6 @@ Package.onUse(function _(api) {
     ]);
 
 
-    api.mainModule('lib/client.jsx', 'client');
-    api.mainModule('lib/server.jsx', 'server');
+    api.mainModule('client.jsx', 'client');
+    api.mainModule('server.jsx', 'server');
 });
