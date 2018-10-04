@@ -41,6 +41,10 @@ import { renderWithSSR } from 'meteor/communitypackages:react-router-ssr';
 
 **`browserHistory`** - This is the history object in the router on the client. The team behind React Router, in all their infinite wisdom, decided to remove access to this in v4 and require you to pass history through props like a f#@%ing hot potato. This allows you to import the history object in a sane manor and use it in the way you have come to know and love :heart:. Enjoy!
 
+```js
+import { browserHistory } from 'meteor/communitypackages:react-router-ssr';
+```
+
 
 ## Usage
 
