@@ -55,7 +55,7 @@ import { renderWithSSR } from 'meteor/communitypackages:react-router-ssr';
 import { withTracker } from 'meteor/react-meteor-data';
 
 
-import React, { Fragment } from 'react';
+import React from 'react';
 import { Route } from 'react-router-dom';
 
 import DashboardPage from './imports/ui/pages/dashbaord';
@@ -66,10 +66,10 @@ import LoginPage from './imports/ui/pages/login';
 export default App = ({ user }) => {
   if (user) {
     return (
-      <Fragment>
-        <Route path="/" component={DashboardPage} />
+      <>
+        <Route exact path="/" component={DashboardPage} />
         <Route path="/profile/:username" component={ProfilePage} />
-      <Fragment/>
+      </>
     );
   }
 
@@ -82,5 +82,5 @@ const AppContainer = withTracker(() => ({
 
 
 
-renderWithSSR(AppContainer);
+renderWithSSR(<AppContainer />);
 ```
