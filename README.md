@@ -16,7 +16,7 @@ This project is published under the `communitypackages` namespace in hopes that 
 First install NPM dependencies
 
 ```sh
-$ npm install --save react react-dom react-router react-helmet history
+$ npm install --save react react-dom react-router react-router-dom react-helmet history
 ```
 
 Then install  `communitypackages:react-router-ssr`
