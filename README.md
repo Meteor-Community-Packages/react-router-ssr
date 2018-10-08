@@ -33,20 +33,54 @@ $ meteor add communitypackages:react-router-ssr
 
 - `options` - An object of rendering options. Currently there is only a single options, but there may be more options in the future.
 
-  - _`store`_ - A redux store. If a store is provided as this option, this package will wrap the Router in a Provider component and pass it the store.
+  - _`storeOptions`_ - An object that contains the options for a redux store.
+
+    - `rootReducer`
+    - `initialState`
+    - `middlewares`
 
 ```js
 import { renderWithSSR } from 'meteor/communitypackages:react-router-ssr';
+
+import thunk from 'redux-thunk';
+import { createLogger } from 'redux-logger';
+
+import rootReducer from './reducers/root';
+
+const logger = createLogger({ diff: true });
+
+renderWithSSR(<App />, {
+  storeOptions: {
+    rootReducer,
+    initialState: { counter: 100 },
+    middlewares: [ thunk, logger ]
+  }
+})
 ```
 
 **`browserHistory`** - This is the history object in the router on the client. The team behind React Router, in all their infinite wisdom, decided to remove access to this in v4 and require you to pass history through props like a f#@%ing hot potato. This allows you to import the history object in a sane manor and use it in the way you have come to know and love :heart:. Enjoy!
 
 ```js
 import { browserHistory } from 'meteor/communitypackages:react-router-ssr';
+
+browserHistory.replace('/login');
 ```
 
 
 ## Usage
+
+This package renders your app into an HTML element with an id of `react-app`, so add one to your main HTML file for your project like so.
+
+```html
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+</head>
+<body>
+    <div id="react-app"></div>
+</body>
+```
 
 In shared code, such as in a `/both/main.jsx` file, or in a file that is imported into your `mainModule` for both the client and server..
 

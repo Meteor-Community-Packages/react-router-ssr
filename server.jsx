@@ -9,11 +9,14 @@ import { renderToString } from 'react-dom/server';
 import { isAppUrl } from './helpers';
 
 let Provider;
+let applyMiddleware;
+let createStore;
 let ServerStyleSheet;
 
 /* eslint-disable */
 try {
     ({ Provider } = require('react-redux'));
+    ({ createStore, applyMiddleware } = require('redux'));
 } catch (e) {}
 
 try {
@@ -22,33 +25,35 @@ try {
 
 /* eslint-enable */
 
-export const renderWithSSR = (routes, options = {}) => {
+export const renderWithSSR = (component, { storeOptions } = {}) => {
     FastRender.onPageLoad((sink) => {
         if (!isAppUrl(sink.request)) {
             return;
         }
 
-        const { store } = options;
-
-        let App = ({ location }) => (
+        let ReactRouterSSR = ({ location }) => (
             <StaticRouter location={location} context={{}}>
-                {routes}
+                {component}
             </StaticRouter>
         );
 
-        if (store) {
-            App = ({ location }) => (
+        if (storeOptions) {
+            const { rootReducer, initialState, middlewares } = storeOptions;
+            const appliedMiddlewares = middlewares ? applyMiddleware(...middlewares) : null;
+
+            const store = createStore(rootReducer, initialState, appliedMiddlewares);
+
+            ReactRouterSSR = ({ location }) => (
                 <Provider store={store}>
                     <StaticRouter location={location} context={{}}>
-                        {routes}
+                        {component}
                     </StaticRouter>
                 </Provider>
             );
 
-
-            sink.appendToBody(`
+            sink.appendToHead(`
                 <script>
-                window.__PRELOADED_STATE__ = ${JSON.stringify(store.getState()).replace(/</g, '\\u003c')}
+                    window.__PRELOADED_STATE__ = ${JSON.stringify(store.getState()).replace(/</g, '\\u003c')}
                 </script>
             `);
         }
@@ -58,10 +63,10 @@ export const renderWithSSR = (routes, options = {}) => {
         if (ServerStyleSheet) {
             const sheet = new ServerStyleSheet();
             AppJSX = sheet.collectStyles(
-                <App location={sink.request.url} />,
+                <ReactRouterSSR location={sink.request.url} />,
             );
         } else {
-            AppJSX = (<App location={sink.request.url} />);
+            AppJSX = (<ReactRouterSSR location={sink.request.url} />);
         }
 
 

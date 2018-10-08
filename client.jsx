@@ -8,19 +8,18 @@ import { Switch } from 'react-router-dom';
 import history from './history.js';
 
 let Provider;
+let applyMiddleware;
+let createStore;
 
 /* eslint-disable */
 try {
-    Provider = require('react-redux').Provider;
+    ({ Provider } = require('react-redux'));
+    ({ createStore, applyMiddleware } = require('redux'));
 } catch (e) {}
-/* eslint-enable */
 
-const renderWithSSR = (component, options = {}) => {
-    const { store } = options;
+const renderWithSSR = (component, { storeOptions } = {}) => {
 
-    store && delete window.__PRELOADED_STATE__;
-
-    let App = () => (
+    let ReactRouterSSR = () => (
         <Router history={history}>
             <Switch>
                 {component}
@@ -28,8 +27,14 @@ const renderWithSSR = (component, options = {}) => {
         </Router>
     );
 
-    if (store) {
-        App = () => (
+    if (storeOptions) {
+        const { rootReducer, middlewares } = storeOptions;
+        const appliedMiddlewares = middlewares ? applyMiddleware(...middlewares) : null;
+        const store = createStore(rootReducer, window.__PRELOADED_STATE__, appliedMiddlewares);
+
+        delete window.__PRELOADED_STATE__;
+
+        ReactRouterSSR = () => (
             <Provider store={store}>
                 <Router history={history}>
                     <Switch>
@@ -41,7 +46,7 @@ const renderWithSSR = (component, options = {}) => {
     }
 
     FastRender.onPageLoad(() => {
-        ReactDOM.hydrate(<App />, document.getElementById('react-app'));
+        ReactDOM.hydrate(<ReactRouterSSR />, document.getElementById('react-app'));
     });
 };
 
