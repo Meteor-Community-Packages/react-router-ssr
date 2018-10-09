@@ -4,7 +4,6 @@ import { FastRender } from 'meteor/staringatlights:fast-render';
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { StaticRouter } from 'react-router';
-import { renderToString } from 'react-dom/server';
 
 import { isAppUrl } from './helpers';
 
@@ -12,6 +11,9 @@ let Provider;
 let applyMiddleware;
 let createStore;
 let ServerStyleSheet;
+let ReactCC;
+let renderToString;
+let cache;
 
 /* eslint-disable */
 try {
@@ -23,10 +25,17 @@ try {
     ({ ServerStyleSheet } = require('styled-components'));
 } catch (e) {}
 
+try {
+    ReactCC  = require('react-component-caching');
+    ({ renderToString } = ReactCC)
+    cache = new ReactCC.ComponentCache();
+} catch (e) {
+    ({ renderToString } = require('react-dom/server'));
+}
 /* eslint-enable */
 
 export const renderWithSSR = (component, { storeOptions } = {}) => {
-    FastRender.onPageLoad((sink) => {
+    FastRender.onPageLoad(async (sink) => {
         if (!isAppUrl(sink.request)) {
             return;
         }
@@ -69,8 +78,9 @@ export const renderWithSSR = (component, { storeOptions } = {}) => {
             AppJSX = (<ReactRouterSSR location={sink.request.url} />);
         }
 
+        const renderedString = ReactCC ? await renderToString(AppJSX, cache) : renderToString(AppJSX);
 
-        sink.renderIntoElementById('react-app', renderToString(AppJSX));
+        sink.renderIntoElementById('react-app', renderedString);
 
         const helmet = Helmet.renderStatic();
         sink.appendToHead(helmet.meta.toString());
