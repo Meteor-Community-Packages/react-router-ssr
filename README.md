@@ -35,9 +35,9 @@ $ meteor add communitypackages:react-router-ssr
 
   - _`storeOptions`_ - An object that contains the options for a redux store.
 
-    - `rootReducer`
-    - `initialState`
-    - `middlewares`
+    - `rootReducer` - Your apps root reducer.
+    - `initialState` - The initial state.
+    - `middlewares` - An array of middlewares to apply.
 
 ```js
 import { renderWithSSR } from 'meteor/communitypackages:react-router-ssr';
@@ -118,3 +118,15 @@ const AppContainer = withTracker(() => ({
 
 renderWithSSR(<AppContainer />);
 ```
+
+## Styled Components
+
+If the [styled-components]() package is installed in your project, this package will detect it's presence, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
+
+## Component Caching
+
+```sh
+$ npm install --save react-component-caching
+```
+
+For improved rendering speed you can install the [react-component-caching](https://www.npmjs.com/package/react-component-caching) package into your project. This package will detect it's presence and use it to render the server side of your application.
