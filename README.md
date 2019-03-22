@@ -93,7 +93,7 @@ import DashboardPage from "./imports/ui/pages/dashbaord";
 import ProfilePage from "./imports/ui/pages/profile";
 import LoginPage from "./imports/ui/pages/login";
 
-export default (App = ({ user }) => {
+const App = ({ user }) => {
   if (user) {
     return (
       <>
@@ -104,7 +104,7 @@ export default (App = ({ user }) => {
   }
 
   return <LoginPage />;
-});
+};
 
 const AppContainer = withTracker(() => ({
   user: Meteor.user()
