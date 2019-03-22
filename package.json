@@ -10,5 +10,41 @@
     "eslint-plugin-promise": "^4.0.1",
     "eslint-plugin-react": "^7.12.4",
     "eslint-plugin-standard": "^4.0.0"
+  },
+  "prettier": {
+    "printWidth": 120
+  },
+  "eslintConfig": {
+    "extends": [
+      "standard",
+      "standard-react"
+    ],
+    "rules": {
+      "semi": [
+        2,
+        "always"
+      ],
+      "comma-dangle": [
+        2,
+        "always-multiline"
+      ],
+      "react/prop-types": 0
+    },
+    "parser": "babel-eslint",
+    "env": {
+      "browser": true,
+      "node": true,
+      "es6": true
+    },
+    "settings": {
+      "import/resolver": {
+        "meteor": {
+          "extensions": [
+            ".js",
+            ".jsx"
+          ]
+        }
+      }
+    }
   }
 }
