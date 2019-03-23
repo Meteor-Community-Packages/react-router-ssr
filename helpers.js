@@ -1,7 +1,7 @@
 import { RoutePolicy } from 'meteor/routepolicy';
 
 export const isAppUrl = function isAppUrl (req) {
-  const url = new URL(req.url).pathname;
+  const url = req.url.pathname;
   if (url === '/favicon.ico' || url === '/robots.txt') {
     return false;
   }
