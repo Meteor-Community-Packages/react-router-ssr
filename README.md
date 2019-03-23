@@ -2,7 +2,6 @@
 
 Simple isomorphic React SSR for Meteor with subscribed data re-hydration
 
-
 ## Supporting the project
 
 This project is published under the `communitypackages` namespace in hopes that it can become maintained through community effort. For now though it is maintained solely by me (@copleykj) and any support you give helps to fund the development and maintenance of almost 2 dozen Packages for Meteor or for use alongside Meteor.
@@ -19,7 +18,7 @@ First install NPM dependencies
 $ npm install --save react react-dom react-router react-router-dom react-helmet history
 ```
 
-Then install  `communitypackages:react-router-ssr`
+Then install `communitypackages:react-router-ssr`
 
 ```sh
 $ meteor add communitypackages:react-router-ssr
@@ -40,12 +39,12 @@ $ meteor add communitypackages:react-router-ssr
     - `middlewares` - An array of middlewares to apply.
 
 ```js
-import { renderWithSSR } from 'meteor/communitypackages:react-router-ssr';
+import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 
-import thunk from 'redux-thunk';
-import { createLogger } from 'redux-logger';
+import thunk from "redux-thunk";
+import { createLogger } from "redux-logger";
 
-import rootReducer from './reducers/root';
+import rootReducer from "./reducers/root";
 
 const logger = createLogger({ diff: true });
 
@@ -53,19 +52,18 @@ renderWithSSR(<App />, {
   storeOptions: {
     rootReducer,
     initialState: { counter: 100 },
-    middlewares: [ thunk, logger ]
+    middlewares: [thunk, logger]
   }
-})
+});
 ```
 
 **`browserHistory`** - This is the history object in the router on the client. The team behind React Router, in all their infinite wisdom, decided to remove access to this in v4 and require you to pass history through props like a f#@%ing hot potato. This allows you to import the history object in a sane manor and use it in the way you have come to know and love :heart:. Enjoy!
 
 ```js
-import { browserHistory } from 'meteor/communitypackages:react-router-ssr';
+import { browserHistory } from "meteor/communitypackages:react-router-ssr";
 
-browserHistory.replace('/login');
+browserHistory.replace("/login");
 ```
-
 
 ## Usage
 
@@ -73,31 +71,29 @@ This package renders your app into an HTML element with an id of `react-app`, so
 
 ```html
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="ie=edge" />
 </head>
 <body>
-    <div id="react-app"></div>
+  <div id="react-app"></div>
 </body>
 ```
 
 In shared code, such as in a `/both/main.jsx` file, or in a file that is imported into your `mainModule` for both the client and server..
 
 ```js
-import { renderWithSSR } from 'meteor/communitypackages:react-router-ssr';
-import { withTracker } from 'meteor/react-meteor-data';
+import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
+import { withTracker } from "meteor/react-meteor-data";
 
+import React from "react";
+import { Route } from "react-router-dom";
 
-import React from 'react';
-import { Route } from 'react-router-dom';
+import DashboardPage from "./imports/ui/pages/dashbaord";
+import ProfilePage from "./imports/ui/pages/profile";
+import LoginPage from "./imports/ui/pages/login";
 
-import DashboardPage from './imports/ui/pages/dashbaord';
-import ProfilePage from './imports/ui/pages/profile';
-import LoginPage from './imports/ui/pages/login';
-
-
-export default App = ({ user }) => {
+const App = ({ user }) => {
   if (user) {
     return (
       <>
@@ -107,14 +103,12 @@ export default App = ({ user }) => {
     );
   }
 
-  return (<LoginPage />);
+  return <LoginPage />;
 };
 
 const AppContainer = withTracker(() => ({
-    user: Meteor.user(),
+  user: Meteor.user()
 }))(App);
-
-
 
 renderWithSSR(<AppContainer />);
 ```
@@ -122,11 +116,3 @@ renderWithSSR(<AppContainer />);
 ## Styled Components
 
 If the [styled-components]() package is installed in your project, this package will detect it's presence, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
-
-## Component Caching
-
-```sh
-$ npm install --save react-component-caching
-```
-
-For improved rendering speed you can install the [react-component-caching](https://www.npmjs.com/package/react-component-caching) package into your project. This package will detect it's presence and use it to render the server side of your application.
