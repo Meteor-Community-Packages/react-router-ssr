@@ -115,4 +115,4 @@ renderWithSSR(<AppContainer />);
 
 ## Styled Components
 
-If the [styled-components]() package is installed in your project, this package will detect it's presence, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
+If the [styled-components](https://styled-components.com/) package is installed in your project, this package will detect it's presence, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
