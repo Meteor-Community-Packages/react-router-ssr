@@ -4,6 +4,8 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { BrowserRouter as Router, Switch } from 'react-router-dom';
 
+import './version-check';
+
 let Provider;
 let applyMiddleware;
 let createStore;

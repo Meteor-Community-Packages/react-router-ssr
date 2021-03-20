@@ -7,6 +7,7 @@ import { StaticRouter } from 'react-router';
 import { renderToString } from 'react-dom/server';
 
 import { isAppUrl } from './helpers';
+import './version-check';
 
 let Provider;
 let applyMiddleware;
@@ -26,7 +27,7 @@ try {
 /* eslint-enable */
 
 export const renderWithSSR = (component, { storeOptions } = {}) => {
-  FastRender.onPageLoad(sink => {
+  FastRender.onPageLoad(async sink => {
     if (!isAppUrl(sink.request)) {
       return;
     }
