@@ -16,7 +16,7 @@ try {
     ({ createStore, applyMiddleware } = require('redux'));
 } catch (e) {}
 
-const renderWithSSR = (component, { storeOptions } = {}) => {
+const renderWithSSR = (component, { renderTarget = 'react-target', storeOptions } = {}) => {
 
     let ReactRouterSSR = () => (
         <Router>
@@ -45,7 +45,7 @@ const renderWithSSR = (component, { storeOptions } = {}) => {
     }
 
     FastRender.onPageLoad(() => {
-        ReactDOM.hydrate(<ReactRouterSSR />, document.getElementById('react-app'));
+        ReactDOM.hydrate(<ReactRouterSSR />, document.getElementById(renderTarget));
     });
 };
 

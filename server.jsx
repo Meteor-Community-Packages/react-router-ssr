@@ -26,7 +26,7 @@ try {
 
 /* eslint-enable */
 
-export const renderWithSSR = (component, { storeOptions } = {}) => {
+export const renderWithSSR = (component, { renderTarget = 'react-target', storeOptions } = {}) => {
   FastRender.onPageLoad(sink => {
     if (!isAppUrl(sink.request)) {
       return;
@@ -78,7 +78,7 @@ export const renderWithSSR = (component, { storeOptions } = {}) => {
 
     const renderedString = renderToString(AppJSX);
 
-    sink.renderIntoElementById('react-app', renderedString);
+    sink.renderIntoElementById(renderTarget, renderedString);
 
     const helmet = Helmet.renderStatic();
     sink.appendToHead(helmet.meta.toString());
