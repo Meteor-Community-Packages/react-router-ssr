@@ -2,10 +2,7 @@ import { FastRender } from 'meteor/staringatlights:fast-render';
 
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { Router } from 'react-router';
-import { Switch } from 'react-router-dom';
-
-import history from './history.js';
+import { BrowserRouter as Router, Switch } from 'react-router-dom';
 
 let Provider;
 let applyMiddleware;
@@ -20,7 +17,7 @@ try {
 const renderWithSSR = (component, { storeOptions } = {}) => {
 
     let ReactRouterSSR = () => (
-        <Router history={history}>
+        <Router>
             <Switch>
                 {component}
             </Switch>
@@ -36,7 +33,7 @@ const renderWithSSR = (component, { storeOptions } = {}) => {
 
         ReactRouterSSR = () => (
             <Provider store={store}>
-                <Router history={history}>
+                <Router>
                     <Switch>
                         {component}
                     </Switch>
@@ -51,4 +48,4 @@ const renderWithSSR = (component, { storeOptions } = {}) => {
 };
 
 
-export { renderWithSSR, history as browserHistory };
+export { renderWithSSR };

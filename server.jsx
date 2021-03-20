@@ -26,7 +26,7 @@ try {
 /* eslint-enable */
 
 export const renderWithSSR = (component, { storeOptions } = {}) => {
-  FastRender.onPageLoad(async sink => {
+  FastRender.onPageLoad(sink => {
     if (!isAppUrl(sink.request)) {
       return;
     }
