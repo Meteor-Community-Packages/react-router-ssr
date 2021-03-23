@@ -11,7 +11,7 @@ chuangbo:cookie@1.1.0
 communitypackages:fast-render@3.3.1
 communitypackages:inject-data@2.3.1
 communitypackages:picker@1.1.0
-communitypackages:react-router-ssr@3.0.0
+communitypackages:react-router-ssr@3.0.1
 ddp@1.4.0
 ddp-client@2.4.0
 ddp-common@1.4.0
