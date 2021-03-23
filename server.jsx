@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { FastRender } from 'meteor/staringatlights:fast-render';
+import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React from 'react';
 import { Helmet } from 'react-helmet';
@@ -7,6 +7,7 @@ import { StaticRouter } from 'react-router';
 import { renderToString } from 'react-dom/server';
 
 import { isAppUrl } from './helpers';
+import './version-check';
 
 let Provider;
 let applyMiddleware;
@@ -25,8 +26,8 @@ try {
 
 /* eslint-enable */
 
-export const renderWithSSR = (component, { storeOptions } = {}) => {
-  FastRender.onPageLoad(async sink => {
+export const renderWithSSR = (component, { renderTarget = 'react-target', storeOptions } = {}) => {
+  FastRender.onPageLoad(sink => {
     if (!isAppUrl(sink.request)) {
       return;
     }
@@ -77,7 +78,7 @@ export const renderWithSSR = (component, { storeOptions } = {}) => {
 
     const renderedString = renderToString(AppJSX);
 
-    sink.renderIntoElementById('react-app', renderedString);
+    sink.renderIntoElementById(renderTarget, renderedString);
 
     const helmet = Helmet.renderStatic();
     sink.appendToHead(helmet.meta.toString());

@@ -4,25 +4,31 @@ Simple isomorphic React SSR for Meteor with subscribed data re-hydration
 
 ## Supporting the project
 
-This project is published under the `communitypackages` namespace in hopes that it can become maintained through community effort. For now though it is maintained solely by me (@copleykj) and any support you give helps to fund the development and maintenance of almost 2 dozen Packages for Meteor or for use alongside Meteor.
+This project, like all of the projects maintained by the Meteor Community Packages org, takes time and hard work to keep updated. If you find this or any of our other packages useful, consider visiting the sponsor section of a repo and sending some love to the dedicated developers that keep your favorite packages up to date.
 
-![Litecoin](http://gdurl.com/xnOe)
+## Upgrading from v2 to v3
 
-[Patreon](https://www.patreon.com/user?u=4866588) / [Paypal](https://www.paypal.me/copleykj)
+To better align with the default app that is created by the `meteor create` command. This package by default now renders into an element with an id of `react-target` where it used to render to and id of `react-app`, but is also now configurable. If your are upgrading from v2, you will need to either change the id in your html file, or use the `renderTarget` configuration option to set the renderTarget id to `react-app`.
+
+```js
+  renderWithSSR(<App />, {
+    renderTarget: 'react-app',
+  });
+```
 
 ## Install
 
-First install NPM dependencies
+1. First install NPM dependencies
 
-```sh
-$ npm install --save react react-dom react-router react-router-dom react-helmet history
-```
+   ```sh
+   npm install --save react react-dom react-router-dom react-helmet
+   ```
 
-Then install `communitypackages:react-router-ssr`
+2. Install `communitypackages:react-router-ssr`
 
-```sh
-$ meteor add communitypackages:react-router-ssr
-```
+   ```sh
+   meteor add communitypackages:react-router-ssr
+   ```
 
 ## Package Exports
 
@@ -32,42 +38,37 @@ $ meteor add communitypackages:react-router-ssr
 
 - `options` - An object of rendering options. Currently there is only a single options, but there may be more options in the future.
 
+  - _`renderTarget`_ - A string specifying the `id` of the element to render your app into. Default is `react-target`
+
   - _`storeOptions`_ - An object that contains the options for a redux store.
 
     - `rootReducer` - Your apps root reducer.
     - `initialState` - The initial state.
     - `middlewares` - An array of middlewares to apply.
 
-```js
-import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
+  ```js
+  import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 
-import thunk from "redux-thunk";
-import { createLogger } from "redux-logger";
+  import thunk from "redux-thunk";
+  import { createLogger } from "redux-logger";
 
-import rootReducer from "./reducers/root";
+  import rootReducer from "./reducers/root";
 
-const logger = createLogger({ diff: true });
+  const logger = createLogger({ diff: true });
 
-renderWithSSR(<App />, {
-  storeOptions: {
-    rootReducer,
-    initialState: { counter: 100 },
-    middlewares: [thunk, logger]
-  }
-});
-```
-
-**`browserHistory`** - This is the history object in the router on the client. The team behind React Router, in all their infinite wisdom, decided to remove access to this in v4 and require you to pass history through props like a f#@%ing hot potato. This allows you to import the history object in a sane manor and use it in the way you have come to know and love :heart:. Enjoy!
-
-```js
-import { browserHistory } from "meteor/communitypackages:react-router-ssr";
-
-browserHistory.replace("/login");
-```
+  renderWithSSR(<App />, {
+    renderTarget: 'react-app',
+    storeOptions: {
+      rootReducer,
+      initialState: { counter: 100 },
+      middlewares: [thunk, logger]
+    }
+  });
+  ```
 
 ## Usage
 
-This package renders your app into an HTML element with an id of `react-app`, so add one to your main HTML file for your project like so.
+By default this package renders your app into an HTML element with an id of `react-target`, so add one to your main HTML file for your project like so, or specify a different id using the `renderTarget` option
 
 ```html
 <head>
@@ -76,7 +77,7 @@ This package renders your app into an HTML element with an id of `react-app`, so
   <meta http-equiv="X-UA-Compatible" content="ie=edge" />
 </head>
 <body>
-  <div id="react-app"></div>
+  <div id="react-target"></div>
 </body>
 ```
 
@@ -84,7 +85,7 @@ In shared code, such as in a `/both/main.jsx` file, or in a file that is importe
 
 ```js
 import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
-import { withTracker } from "meteor/react-meteor-data";
+import { useTracker } from "meteor/react-meteor-data";
 
 import React from "react";
 import { Route } from "react-router-dom";
@@ -94,6 +95,9 @@ import ProfilePage from "./imports/ui/pages/profile";
 import LoginPage from "./imports/ui/pages/login";
 
 const App = ({ user }) => {
+  const { user } = useTracker(() => ({
+    user: Meteor.user()
+  }));
   if (user) {
     return (
       <>
@@ -106,11 +110,7 @@ const App = ({ user }) => {
   return <LoginPage />;
 };
 
-const AppContainer = withTracker(() => ({
-  user: Meteor.user()
-}))(App);
-
-renderWithSSR(<AppContainer />);
+renderWithSSR(<App />);
 ```
 
 ## Styled Components

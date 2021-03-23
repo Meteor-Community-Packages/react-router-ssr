@@ -1,11 +1,10 @@
-import { FastRender } from 'meteor/staringatlights:fast-render';
+import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { Router } from 'react-router';
-import { Switch } from 'react-router-dom';
+import { BrowserRouter as Router, Switch } from 'react-router-dom';
 
-import history from './history.js';
+import './version-check';
 
 let Provider;
 let applyMiddleware;
@@ -17,10 +16,10 @@ try {
     ({ createStore, applyMiddleware } = require('redux'));
 } catch (e) {}
 
-const renderWithSSR = (component, { storeOptions } = {}) => {
+const renderWithSSR = (component, { renderTarget = 'react-target', storeOptions } = {}) => {
 
     let ReactRouterSSR = () => (
-        <Router history={history}>
+        <Router>
             <Switch>
                 {component}
             </Switch>
@@ -36,7 +35,7 @@ const renderWithSSR = (component, { storeOptions } = {}) => {
 
         ReactRouterSSR = () => (
             <Provider store={store}>
-                <Router history={history}>
+                <Router>
                     <Switch>
                         {component}
                     </Switch>
@@ -46,9 +45,9 @@ const renderWithSSR = (component, { storeOptions } = {}) => {
     }
 
     FastRender.onPageLoad(() => {
-        ReactDOM.hydrate(<ReactRouterSSR />, document.getElementById('react-app'));
+        ReactDOM.hydrate(<ReactRouterSSR />, document.getElementById(renderTarget));
     });
 };
 
 
-export { renderWithSSR, history as browserHistory };
+export { renderWithSSR };
