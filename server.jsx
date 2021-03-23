@@ -4,7 +4,10 @@ import { FastRender } from 'meteor/communitypackages:fast-render';
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { StaticRouter } from 'react-router';
+import ReactDom from 'react-dom';
 import { renderToString } from 'react-dom/server';
+
+console.log(ReactDom)
 
 import { isAppUrl } from './helpers';
 import './version-check';
