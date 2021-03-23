@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { FastRender } from 'meteor/staringatlights:fast-render';
+import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React from 'react';
 import { Helmet } from 'react-helmet';

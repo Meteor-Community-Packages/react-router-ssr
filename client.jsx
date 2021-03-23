@@ -1,4 +1,4 @@
-import { FastRender } from 'meteor/staringatlights:fast-render';
+import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React from 'react';
 import ReactDOM from 'react-dom';
