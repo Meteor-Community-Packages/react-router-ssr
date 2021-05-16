@@ -1,18 +1,24 @@
 {
-  "devDependencies": {
-    "babel-eslint": "^10.0.1",
-    "eslint": "^5.15.3",
-    "eslint-config-standard": "^12.0.0",
-    "eslint-config-standard-react": "^7.0.2",
-    "eslint-import-resolver-meteor": "^0.4.0",
-    "eslint-plugin-import": "^2.16.0",
-    "eslint-plugin-node": "^8.0.1",
-    "eslint-plugin-promise": "^4.0.1",
-    "eslint-plugin-react": "^7.12.4",
-    "eslint-plugin-standard": "^4.0.0"
+  "name": "meteor-react-router-ssr",
+  "version": "1.0.0",
+  "scripts": {
+    "lint": "eslint ./ && markdownlint -i node_modules -c ./.markdownlint.json ./",
+    "publish-release": "rimraf ./node_modules && meteor publish && meteor npm i --only=dev",
+    "pre-commit": "lint-staged",
+    "prepare": "husky install"
   },
-  "prettier": {
-    "printWidth": 120
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.14.2",
+    "eslint": "^7.26.0",
+    "eslint-config-standard": "^16.0.2",
+    "eslint-config-standard-react": "^11.0.1",
+    "eslint-plugin-import": "^2.23.2",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.3.1",
+    "eslint-plugin-react": "^7.23.2",
+    "husky": "^6.0.0",
+    "lint-staged": "^11.0.0",
+    "markdownlint-cli": "^0.27.1"
   },
   "eslintConfig": {
     "extends": [
@@ -30,21 +36,18 @@
       ],
       "react/prop-types": 0
     },
-    "parser": "babel-eslint",
+    "parser": "@babel/eslint-parser",
+    "parserOptions": {
+      "requireConfigFile": false
+    },
     "env": {
       "browser": true,
       "node": true,
       "es6": true
-    },
-    "settings": {
-      "import/resolver": {
-        "meteor": {
-          "extensions": [
-            ".js",
-            ".jsx"
-          ]
-        }
-      }
     }
+  },
+  "lint-staged": {
+    "*.js": "eslint --cache --fix",
+    "*.md": "markdownlint -f -c .markdownlint.json"
   }
 }

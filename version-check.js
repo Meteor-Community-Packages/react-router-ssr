@@ -7,5 +7,5 @@ checkNpmVersions(
     'react-router-dom': '4.x || 5.x',
     'react-helmet': '6.x',
   },
-  'communitypackages:react-router-ssr'
+  'communitypackages:react-router-ssr',
 );
