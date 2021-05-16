@@ -2,7 +2,7 @@
   "name": "meteor-react-router-ssr",
   "version": "1.0.0",
   "scripts": {
-    "lint": "eslint ./ && markdownlint -i node_modules -c ./.markdownlint.json ./",
+    "lint": "eslint ./ && markdownlint ./",
     "publish-release": "rimraf ./node_modules && meteor publish && meteor npm i --only=dev",
     "pre-commit": "lint-staged",
     "prepare": "husky install"
@@ -48,6 +48,6 @@
   },
   "lint-staged": {
     "*.js": "eslint --cache --fix",
-    "*.md": "markdownlint -f -c .markdownlint.json"
+    "*.md": "markdownlint -f"
   }
 }
