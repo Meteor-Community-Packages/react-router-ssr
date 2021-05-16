@@ -10,7 +10,7 @@ Package.describe({
 
 Package.onUse(function _ (api) {
   api.versionsFrom('2.0');
-  api.use(['ecmascript', 'communitypackages:fast-render@3.3.1', 'tmeasday:check-npm-versions@1.0.1']);
+  api.use(['ecmascript', 'communitypackages:fast-render@4.0.0', 'tmeasday:check-npm-versions@1.0.2']);
 
   api.mainModule('client.jsx', 'client');
   api.mainModule('server.jsx', 'server');
