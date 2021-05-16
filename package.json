@@ -8,6 +8,7 @@
     "prepare": "husky install"
   },
   "devDependencies": {
+    "@babel/core": "^7.14.2",
     "@babel/eslint-parser": "^7.14.2",
     "eslint": "^7.26.0",
     "eslint-config-standard": "^16.0.2",
