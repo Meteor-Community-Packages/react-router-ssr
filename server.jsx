@@ -11,6 +11,16 @@ import { renderToString } from 'react-dom/server';
 import { isAppUrl } from './helpers';
 import './version-check';
 
+let helmetTags = [
+  'base',
+  'meta',
+  'link',
+  'script',
+  'style',
+  'title',
+  'noscript',
+];
+
 let Provider;
 let applyMiddleware;
 let createStore;
@@ -83,7 +93,8 @@ export const renderWithSSR = (component, { renderTarget = 'react-target', storeO
     sink.renderIntoElementById(renderTarget, renderedString);
 
     const helmet = Helmet.renderStatic();
-    sink.appendToHead(helmet.meta.toString());
-    sink.appendToHead(helmet.title.toString());
+    helmetTags.forEach(tag => {
+      sink.appendToHead(helmet[tag].toString());
+    });
   });
 };
