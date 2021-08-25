@@ -4,14 +4,13 @@ import { FastRender } from 'meteor/communitypackages:fast-render';
 import React from 'react';
 import { Helmet } from 'react-helmet';
 import { StaticRouter } from 'react-router';
-import ReactDom from 'react-dom';
+import ReactDom from 'react-dom'; // eslint-disable-line no-unused-vars
 import { renderToString } from 'react-dom/server';
-
 
 import { isAppUrl } from './helpers';
 import './version-check';
 
-let helmetTags = [
+const helmetTags = [
   'base',
   'meta',
   'link',
@@ -30,11 +29,11 @@ let ServerStyleSheet;
 try {
   ({ Provider } = require('react-redux'));
   ({ createStore, applyMiddleware } = require('redux'));
-} catch (e) {}
+} catch (e) { }
 
 try {
   ({ ServerStyleSheet } = require('styled-components'));
-} catch (e) {}
+} catch (e) { }
 
 /* eslint-enable */
 
@@ -45,8 +44,8 @@ export const renderWithSSR = (component, { renderTarget = 'react-target', storeO
     }
 
     let ReactRouterSSR = ({ location }) => (
-      <StaticRouter location={location} context={{}}>
-        {component}
+      <StaticRouter location={ location } context={ {} }>
+        { component }
       </StaticRouter>
     );
 
@@ -59,9 +58,9 @@ export const renderWithSSR = (component, { renderTarget = 'react-target', storeO
       const store = createStore(rootReducer, initialState, appliedMiddlewares);
 
       ReactRouterSSR = ({ location }) => (
-        <Provider store={store}>
-          <StaticRouter location={location} context={{}}>
-            {component}
+        <Provider store={ store }>
+          <StaticRouter location={ location } context={ {} }>
+            { component }
           </StaticRouter>
         </Provider>
       );
@@ -70,8 +69,8 @@ export const renderWithSSR = (component, { renderTarget = 'react-target', storeO
       sink.appendToHead(`
           <script>
               window.__PRELOADED_STATE__ = ${JSON.stringify(
-                store.getState()
-              ).replace(/</g, '\\u003c')}
+        store.getState()
+      ).replace(/</g, '\\u003c')}
           </script>
       `);
       /* eslint-enable */
@@ -82,10 +81,10 @@ export const renderWithSSR = (component, { renderTarget = 'react-target', storeO
     if (ServerStyleSheet) {
       const sheet = new ServerStyleSheet();
       AppJSX = sheet.collectStyles(
-        <ReactRouterSSR location={sink.request.url} />
+        <ReactRouterSSR location={ sink.request.url } />,
       );
     } else {
-      AppJSX = <ReactRouterSSR location={sink.request.url} />;
+      AppJSX = <ReactRouterSSR location={ sink.request.url } />;
     }
 
     const renderedString = renderToString(AppJSX);
