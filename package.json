@@ -41,6 +41,9 @@
     "parserOptions": {
       "requireConfigFile": false
     },
+    "presets": [
+      "@babel/preset-react"
+    ],
     "env": {
       "browser": true,
       "node": true,
