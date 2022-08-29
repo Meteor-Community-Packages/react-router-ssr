@@ -3,7 +3,7 @@ import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React from 'react';
 import { Helmet } from 'react-helmet';
-import { StaticRouter } from 'react-router';
+import { StaticRouter } from "react-router-dom/server";
 import ReactDom from 'react-dom'; // eslint-disable-line no-unused-vars
 import { renderToString } from 'react-dom/server';
 
