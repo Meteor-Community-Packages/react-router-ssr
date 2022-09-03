@@ -88,22 +88,21 @@ import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 import { useTracker } from "meteor/react-meteor-data";
 
 import React from "react";
-import { Route } from "react-router-dom";
-
+import { Route, Routes } from "react-router-dom";
 import DashboardPage from "./imports/ui/pages/dashbaord";
 import ProfilePage from "./imports/ui/pages/profile";
 import LoginPage from "./imports/ui/pages/login";
 
-const App = ({ user }) => {
+const App = () => {
   const { user } = useTracker(() => ({
     user: Meteor.user()
   }));
   if (user) {
     return (
-      <>
-        <Route exact path="/" component={DashboardPage} />
-        <Route path="/profile/:username" component={ProfilePage} />
-      </>
+      <Routes>
+        <Route exact path="/" element={DashboardPage} />
+        <Route path="/profile/:username" element={ProfilePage} />
+      </Routes>
     );
   }
 
