@@ -16,6 +16,10 @@ To better align with the default app that is created by the `meteor create` comm
   });
 ```
 
+## Upgrading from v3 to v4
+
+Update to `react-router-dom` to v6
+
 ## Install
 
 1. First install NPM dependencies
