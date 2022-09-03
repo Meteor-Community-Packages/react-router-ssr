@@ -2,11 +2,13 @@
 
 Simple isomorphic React SSR for Meteor with subscribed data re-hydration
 
-## Supporting the project
+## Supporting the project ❤️
 
 This project, like all of the projects maintained by the Meteor Community Packages org, takes time and hard work to keep updated. If you find this or any of our other packages useful, consider visiting the sponsor section of a repo and sending some love to the dedicated developers that keep your favorite packages up to date.
 
-## Upgrading from v2 to v3
+## Upgrades
+
+### Upgrading from v2 to v3
 
 To better align with the default app that is created by the `meteor create` command. This package by default now renders into an element with an id of `react-target` where it used to render to and id of `react-app`, but is also now configurable. If your are upgrading from v2, you will need to either change the id in your html file, or use the `renderTarget` configuration option to set the renderTarget id to `react-app`.
 
@@ -16,7 +18,7 @@ To better align with the default app that is created by the `meteor create` comm
   });
 ```
 
-## Upgrading from v3 to v4
+### Upgrading from v3 to v4
 
 Update to `react-router-dom` to v6
 
@@ -34,7 +36,11 @@ Update to `react-router-dom` to v6
    meteor add communitypackages:react-router-ssr
    ```
 
-## Package Exports
+> For `react-router-dom` v5 use v3 `communitypackages:react-router-ssr`.
+>
+> For `react-router-dom` v6 use v4 `communitypackages:react-router-ssr`.
+
+## Package Exports 📦
 
 **`renderWithSSR(rootComponent, [options])`** - Isomorphic app rendering.
 
@@ -70,7 +76,7 @@ Update to `react-router-dom` to v6
   });
   ```
 
-## Usage
+## Usage ⚙️
 
 By default this package renders your app into an HTML element with an id of `react-target`, so add one to your main HTML file for your project like so, or specify a different id using the `renderTarget` option
 
@@ -116,6 +122,6 @@ const App = () => {
 renderWithSSR(<App />);
 ```
 
-## Styled Components
+## Styled Components 💅
 
-If the [styled-components](https://styled-components.com/) package is installed in your project, this package will detect it's presence, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
+If the [styled-components](https://styled-components.com/) package is installed in your project, this package will detect it is present, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
