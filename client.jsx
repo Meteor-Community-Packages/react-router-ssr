@@ -2,7 +2,7 @@ import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React from 'react';
 import ReactDOM from 'react-dom';
-import { BrowserRouter as Router, Switch } from 'react-router-dom';
+import { BrowserRouter } from 'react-router-dom';
 
 import './version-check';
 
@@ -19,11 +19,9 @@ try {
 const renderWithSSR = (component, { renderTarget = 'react-target', storeOptions } = {}) => {
 
     let ReactRouterSSR = () => (
-        <Router>
-            <Switch>
-                {component}
-            </Switch>
-        </Router>
+        <BrowserRouter>
+            {component}
+        </BrowserRouter>
     );
 
     if (storeOptions) {
@@ -35,11 +33,9 @@ const renderWithSSR = (component, { renderTarget = 'react-target', storeOptions 
 
         ReactRouterSSR = () => (
             <Provider store={store}>
-                <Router>
-                    <Switch>
-                        {component}
-                    </Switch>
-                </Router>
+                <BrowserRouter>
+                    {component}
+                </BrowserRouter>
             </Provider>
         );
     }

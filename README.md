@@ -2,11 +2,13 @@
 
 Simple isomorphic React SSR for Meteor with subscribed data re-hydration
 
-## Supporting the project
+## Supporting the project ❤️
 
 This project, like all of the projects maintained by the Meteor Community Packages org, takes time and hard work to keep updated. If you find this or any of our other packages useful, consider visiting the sponsor section of a repo and sending some love to the dedicated developers that keep your favorite packages up to date.
 
-## Upgrading from v2 to v3
+## Upgrades
+
+### Upgrading from v2 to v3
 
 To better align with the default app that is created by the `meteor create` command. This package by default now renders into an element with an id of `react-target` where it used to render to and id of `react-app`, but is also now configurable. If your are upgrading from v2, you will need to either change the id in your html file, or use the `renderTarget` configuration option to set the renderTarget id to `react-app`.
 
@@ -15,6 +17,10 @@ To better align with the default app that is created by the `meteor create` comm
     renderTarget: 'react-app',
   });
 ```
+
+### Upgrading from v3 to v4
+
+Update to `react-router-dom` to v6
 
 ## Install
 
@@ -30,7 +36,11 @@ To better align with the default app that is created by the `meteor create` comm
    meteor add communitypackages:react-router-ssr
    ```
 
-## Package Exports
+> For `react-router-dom` v5 use v3 `communitypackages:react-router-ssr`.
+>
+> For `react-router-dom` v6 use v4 `communitypackages:react-router-ssr`.
+
+## Package Exports 📦
 
 **`renderWithSSR(rootComponent, [options])`** - Isomorphic app rendering.
 
@@ -66,7 +76,7 @@ To better align with the default app that is created by the `meteor create` comm
   });
   ```
 
-## Usage
+## Usage ⚙️
 
 By default this package renders your app into an HTML element with an id of `react-target`, so add one to your main HTML file for your project like so, or specify a different id using the `renderTarget` option
 
@@ -88,22 +98,21 @@ import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 import { useTracker } from "meteor/react-meteor-data";
 
 import React from "react";
-import { Route } from "react-router-dom";
-
+import { Route, Routes } from "react-router-dom";
 import DashboardPage from "./imports/ui/pages/dashbaord";
 import ProfilePage from "./imports/ui/pages/profile";
 import LoginPage from "./imports/ui/pages/login";
 
-const App = ({ user }) => {
+const App = () => {
   const { user } = useTracker(() => ({
     user: Meteor.user()
   }));
   if (user) {
     return (
-      <>
-        <Route exact path="/" component={DashboardPage} />
-        <Route path="/profile/:username" component={ProfilePage} />
-      </>
+      <Routes>
+        <Route exact path="/" element={DashboardPage} />
+        <Route path="/profile/:username" element={ProfilePage} />
+      </Routes>
     );
   }
 
@@ -113,6 +122,6 @@ const App = ({ user }) => {
 renderWithSSR(<App />);
 ```
 
-## Styled Components
+## Styled Components 💅
 
-If the [styled-components](https://styled-components.com/) package is installed in your project, this package will detect it's presence, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
+If the [styled-components](https://styled-components.com/) package is installed in your project, this package will detect it is present, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
