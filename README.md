@@ -6,28 +6,28 @@ Simple isomorphic React SSR for Meteor with subscribed data re-hydration
 
 This project, like all of the projects maintained by the Meteor Community Packages org, takes time and hard work to keep updated. If you find this or any of our other packages useful, consider visiting the sponsor section of a repo and sending some love to the dedicated developers that keep your favorite packages up to date.
 
-## Upgrades
-
-### Upgrading from v2 to v3
-
-To better align with the default app that is created by the `meteor create` command. This package by default now renders into an element with an id of `react-target` where it used to render to and id of `react-app`, but is also now configurable. If your are upgrading from v2, you will need to either change the id in your html file, or use the `renderTarget` configuration option to set the renderTarget id to `react-app`.
-
-```js
-  renderWithSSR(<App />, {
-    renderTarget: 'react-app',
-  });
-```
-
 ### Upgrading from v3 to v4
 
 Update to `react-router-dom` to v6
+
+### Upgrading from v4 to v5
+
+This package now requires React 18 and uses Data Routers from React Router v5. Because of this there are several modifications that you will need to make to your app to upgrade. Also support for Redux and Styled Components has been removed from this package. You will need to find a new way to support them in your app.
+
+The following steps are things you may need to do to upgrade your app from using v4 to v5 of this package:
+
+1. Update `react` to v18
+2. Update `react-router-dom` to v6 if you haven't already
+3. Install `abort-controller` with `npm install abort-controller`
+4. Rewrite your root component to either be a JSX fragment containing `<Route>` components, or an array of Route object.
+5. If you are using Redux or Styled Components, this package no longer has built in support for them. You will need to explore how to architect your app to support them.
 
 ## Install
 
 1. First install NPM dependencies
 
    ```sh
-   npm install --save react react-dom react-router-dom react-helmet
+   npm install --save react@18 react-dom@18 react-router-dom@6 react-helmet@6 abort-controller@3
    ```
 
 2. Install `communitypackages:react-router-ssr`
@@ -36,43 +36,26 @@ Update to `react-router-dom` to v6
    meteor add communitypackages:react-router-ssr
    ```
 
-> For `react-router-dom` v5 use v3 `communitypackages:react-router-ssr`.
->
-> For `react-router-dom` v6 use v4 `communitypackages:react-router-ssr`.
-
 ## Package Exports 📦
 
-**`renderWithSSR(rootComponent, [options])`** - Isomorphic app rendering.
+**`renderWithSSR(routes, [options])`** - Isomorphic app rendering.
 
-- `rootComponent` - The component that encompasses your application. Can be any React element. Routers and Switches are handled by the package so those aren't necessary inside your app.
+- `routes` - A JSX element or array of JSX elements that represent the routes of your app.
 
-- `options` - An object of rendering options. Currently there is only a single options, but there may be more options in the future.
+- `options` - An object of rendering options.
 
   - _`renderTarget`_ - A string specifying the `id` of the element to render your app into. Default is `react-target`
-
-  - _`storeOptions`_ - An object that contains the options for a redux store.
-
-    - `rootReducer` - Your apps root reducer.
-    - `initialState` - The initial state.
-    - `middlewares` - An array of middlewares to apply.
 
   ```js
   import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 
-  import thunk from "redux-thunk";
-  import { createLogger } from "redux-logger";
+  const AppRoutes = [
+    { path: "/", element: <Home /> },
+    { path: "/about", element: <About /> },
+  ]
 
-  import rootReducer from "./reducers/root";
-
-  const logger = createLogger({ diff: true });
-
-  renderWithSSR(<App />, {
+  renderWithSSR(AppRoutes, {
     renderTarget: 'react-app',
-    storeOptions: {
-      rootReducer,
-      initialState: { counter: 100 },
-      middlewares: [thunk, logger]
-    }
   });
   ```
 
@@ -93,35 +76,28 @@ By default this package renders your app into an HTML element with an id of `rea
 
 In shared code, such as in a `/both/main.jsx` file, or in a file that is imported into your `mainModule` for both the client and server..
 
-```js
+```jsx
 import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
-import { useTracker } from "meteor/react-meteor-data";
 
 import React from "react";
-import { Route, Routes } from "react-router-dom";
 import DashboardPage from "./imports/ui/pages/dashbaord";
 import ProfilePage from "./imports/ui/pages/profile";
 import LoginPage from "./imports/ui/pages/login";
 
-const App = () => {
-  const { user } = useTracker(() => ({
-    user: Meteor.user()
-  }));
-  if (user) {
-    return (
-      <Routes>
-        <Route exact path="/" element={DashboardPage} />
-        <Route path="/profile/:username" element={ProfilePage} />
-      </Routes>
-    );
-  }
+const AppRoutes = [
+  { path: "/", element: <DashboardPage /> },
+  { path: "/profile/:username", element: <ProfilePage /> },
+  { path: "/login", element: <LoginPage /> },
+];
 
-  return <LoginPage />;
-};
+// Alternatively you can use a JSX fragment
+// const AppRoutes = (
+//   <>
+//     <Route path="/" element={<DashboardPage />} />
+//     <Route path="/profile/:username" element={<ProfilePage />} />
+//     <Route path="/login" element={<LoginPage />} />
+//   </>
+// );
 
-renderWithSSR(<App />);
+renderWithSSR(AppRoutes);
 ```
-
-## Styled Components 💅
-
-If the [styled-components](https://styled-components.com/) package is installed in your project, this package will detect it is present, create a new `ServerStyleSheet`, collect all styles, and use them to render your app.
