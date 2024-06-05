@@ -1,16 +1,15 @@
 import { FastRender } from 'meteor/communitypackages:fast-render';
 import { Headers, Request } from 'meteor/fetch';
-
 import React, { StrictMode } from 'react';
 import { Helmet } from 'react-helmet';
 import { createRoutesFromElements } from 'react-router-dom';
 import { StaticRouterProvider, createStaticHandler, createStaticRouter } from 'react-router-dom/server';
 import { renderToString } from 'react-dom/server';
-// these 2 imports just silence warnings from the check-npm-versions package because the
-// imports above have / server at the end and meteor won't bundle the package.json file for these.
-import 'react-dom';
 import AbortController from 'abort-controller';
 import { isAppUrl } from './helpers';
+// This import just silences warnings from the check-npm-versions package because the
+// import above has /server at the end and meteor won't bundle the package.json file for these.
+import 'react-dom';
 import './version-check';
 
 const helmetTags = [
@@ -82,10 +81,14 @@ function createFetchRequest (sink) {
     signal: controller.signal,
   };
 
-  const href = url.href;
-  const host = sinkHeaders['x-forwarded-host'];
-  const proto = sinkHeaders['x-forwarded-proto'];
-
-  const newUrl = new URL(`${proto}://${host}${href}`);
+  const baseUrl = getBaseUrlFromHeaders(sinkHeaders);
+  const fullUrl = `${baseUrl}${url.pathname || ''}`;
+  const newUrl = new URL(fullUrl);
   return new Request(newUrl, init);
+};
+
+const getBaseUrlFromHeaders = headers => {
+  const protocol = headers['x-forwarded-proto'];
+  const { host } = headers;
+  return `${protocol ? `${protocol}:` : ''}//${host}`;
 };
