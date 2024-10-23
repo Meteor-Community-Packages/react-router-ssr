@@ -6,7 +6,6 @@ checkNpmVersions(
     'react-dom': '18.x',
     'react-router-dom': '6.x',
     'react-helmet': '6.x',
-    'abort-controller': '3.x',
   },
   'communitypackages:react-router-ssr',
 );
