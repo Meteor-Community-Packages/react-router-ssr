@@ -17,7 +17,7 @@ Npm.depends({
 
 Package.onUse(function _ (api) {
   api.versionsFrom('2.3');
-  api.use(['ecmascript', 'fetch', 'communitypackages:fast-render@5.0.0-beta.0', 'tmeasday:check-npm-versions@2.0.0']);
+  api.use(['ecmascript', 'fetch', 'communitypackages:fast-render@5.0.0-beta.2', 'tmeasday:check-npm-versions@2.0.0']);
 
   api.mainModule('client.jsx', 'client');
   api.mainModule('server.jsx', 'server');
