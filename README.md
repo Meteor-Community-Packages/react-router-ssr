@@ -11,7 +11,7 @@ This project, like all of the projects maintained by the Meteor Community Packag
 1. First install NPM dependencies
 
    ```sh
-   npm install --save react@18 react-dom@18 react-router-dom@6 react-helmet@6 abort-controller@3
+   npm install --save react@18 react-dom@18 react-router-dom@6 react-helmet@6
    ```
 
 2. Install `communitypackages:react-router-ssr`
