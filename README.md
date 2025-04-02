@@ -6,22 +6,6 @@ Simple isomorphic React SSR for Meteor with subscribed data re-hydration
 
 This project, like all of the projects maintained by the Meteor Community Packages org, takes time and hard work to keep updated. If you find this or any of our other packages useful, consider visiting the sponsor section of a repo and sending some love to the dedicated developers that keep your favorite packages up to date.
 
-### Upgrading from v3 to v4
-
-Update to `react-router-dom` to v6
-
-### Upgrading from v4 to v5
-
-This package now requires React 18 and uses Data Routers from React Router v5. Because of this there are several modifications that you will need to make to your app to upgrade. Also support for Redux and Styled Components has been removed from this package. You will need to find a new way to support them in your app.
-
-The following steps are things you may need to do to upgrade your app from using v4 to v5 of this package:
-
-1. Update `react` to v18
-2. Update `react-router-dom` to v6 if you haven't already
-3. Install `abort-controller` with `npm install abort-controller`
-4. Rewrite your root component to either be a JSX fragment containing `<Route>` components, or an array of Route object.
-5. If you are using Redux or Styled Components, this package no longer has built in support for them. You will need to explore how to architect your app to support them.
-
 ## Install
 
 1. First install NPM dependencies
@@ -58,6 +42,8 @@ The following steps are things you may need to do to upgrade your app from using
     renderTarget: 'react-app',
   });
   ```
+
+**`useSubscribeSuspense(name, ...args)`** - A server enabled version of `react-meteor-data`'s suspendable `useSubscribe` hook. Arguments are same as `Meteor.subscribe`.
 
 ## Usage ⚙️
 
