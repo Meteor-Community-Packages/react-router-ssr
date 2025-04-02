@@ -26,11 +26,12 @@ const helmetTags = [
   'noscript',
 ];
 
-class ReactStreamCollector {
+// This is a simple stream collector that collects the chunks of data
+// and allows conversion of said data to a string.
+class StreamCollector {
   constructor () {
     this.chunks = [];
     this.eventCallbacks = {};
-    this.closed = false;
   }
 
   write (chunk, ...args) {
@@ -41,27 +42,7 @@ class ReactStreamCollector {
     return this.chunks.join('');
   }
 
-  finish () {
-    this.finished = true;
-    const finishCallbacks = this.eventCallbacks.finish || [];
-    finishCallbacks.forEach(cb => cb());
-  }
-
-  close () {
-    this.closed = true;
-    const closeCallbacks = this.eventCallbacks.close || [];
-    closeCallbacks.forEach(cb => cb());
-  }
-
-  drain () {
-    console.log('drain');
-  }
-
-  on (event, cb) {
-    if (!this.eventCallbacks[event]) {
-      this.eventCallbacks[event] = [];
-    }
-    this.eventCallbacks[event].push(cb);
+  on () {
   }
 
   error (args) {
@@ -69,12 +50,13 @@ class ReactStreamCollector {
   }
 
   end () {
-    console.log('end');
   }
 }
 
+// Custom renderToString function that uses the StreamCollector to collect data
+// from ReactDOMServer's renderToPipeableStream method.
 const renderToString = async (jsx) => {
-  const collector = new ReactStreamCollector();
+  const collector = new StreamCollector();
   return new Promise(Meteor.bindEnvironment((resolve, reject) => {
     const handle = setTimeout(() => {
       abort();
