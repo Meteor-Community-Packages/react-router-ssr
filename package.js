@@ -2,7 +2,7 @@
 
 Package.describe({
   name: 'communitypackages:react-router-ssr',
-  version: '6.0.0-beta.0',
+  version: '6.0.0-beta.1',
   summary: 'Simple isomorphic React SSR for Meteor with subscribed data re-hydration',
   git: 'https://github.com/Meteor-Community-Packages/react-router-ssr.git',
   documentation: 'README.md',
