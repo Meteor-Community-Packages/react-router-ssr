@@ -6,6 +6,8 @@ import { RouterProvider, createRoutesFromElements, createBrowserRouter } from 'r
 
 import './version-check';
 
+export * from './both';
+
 const renderWithSSR = (routes, { renderTarget = 'react-target' } = {}) => {
   if (!Array.isArray(routes)) {
     routes = createRoutesFromElements(routes);

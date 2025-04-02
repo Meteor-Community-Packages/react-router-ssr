@@ -14,6 +14,8 @@ import { isAppUrl } from './helpers';
 import 'react-dom';
 import './version-check';
 
+export * from './both';
+
 const helmetTags = [
   'base',
   'meta',
