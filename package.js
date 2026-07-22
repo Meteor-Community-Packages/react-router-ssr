@@ -20,7 +20,7 @@ Package.onUse(function _ (api) {
     'react-meteor-data@4.0.0',
     'communitypackages:fast-render@5.0.0',
     'communitypackages:inject-data@3.0.0',
-    'tmeasday:check-npm-versions@2.0.0'
+    'tmeasday:check-npm-versions@2.0.0',
   ]);
 
   api.mainModule('client.jsx', 'client');

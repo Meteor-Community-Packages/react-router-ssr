@@ -173,4 +173,3 @@ bundler and the classic bundler alike.
 > Upgrading from v6? v6 required a `compileWithMeteor([...])` externals block in
 > `rspack.config.js` to share a single react-router copy. With injection that's no longer
 > needed — **delete it.**
-
