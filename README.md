@@ -11,13 +11,16 @@ This project, like all of the projects maintained by the Meteor Community Packag
 1. First install NPM dependencies
 
    ```sh
-   npm install --save react@19 react-dom@19 react-router-dom@6
+   npm install --save react@19 react-dom@19 react-router@7
    ```
 
-   > **React 19 is required.** This package renders and hydrates the whole
-   > document, and relies on React 19's native document-metadata hoisting for the
-   > `<head>` (see [Managing the document head](#managing-the-document-head)). It
-   > will refuse to load on React 18. No `react-helmet` is needed or supported.
+   > **React 19 and React Router 7 or 8 are required.** Your app imports React Router and passes
+   > it to this package (see [Usage](#usage)), so **React Router 7 or 8 both work** — including
+   > v8's ESM-only build. This package renders and hydrates the whole document and relies on
+   > React 19's native document-metadata hoisting for the `<head>`
+   > (see [Managing the document head](#managing-the-document-head)); it will refuse to load on
+   > React 18, and `react-helmet` is neither needed nor supported. *(For React Router 6, use
+   > `react-router-ssr@6`.)*
 
 2. Install `communitypackages:react-router-ssr`
 
@@ -25,63 +28,50 @@ This project, like all of the projects maintained by the Meteor Community Packag
    meteor add communitypackages:react-router-ssr
    ```
 
-## Upgrading from v5
+## Upgrading from v6
 
-v6 is a rewrite around React 19 and whole-document rendering. Coming from v5, there are four
-changes to make — most are deletions.
+v7 adds React Router 7 and 8 support (v6 supported React Router 6) and changes how React Router
+is supplied to the package — your app now **injects** it. There are three changes:
 
-1. **Move to React 19.** React 18 is no longer supported (the package won't load on it). Bump
-   React and drop two packages v5 required that v6 no longer needs:
+1. **Move to React Router 7 or 8** and update your app's own imports from `react-router-dom` to
+   `react-router` (v7/v8 consolidated everything into the `react-router` package):
 
    ```sh
-   npm install --save react@19 react-dom@19 react-router-dom@6
-   npm uninstall react-helmet abort-controller
+   npm uninstall react-router-dom
+   npm install --save react-router@7   # or react-router@8
    ```
 
-   `react-router-dom` stays on v6. `abort-controller` is now bundled by the package, and
-   `react-helmet` is replaced by native head management (next).
-
-2. **Replace react-helmet with native document metadata.** v6 renders and hydrates the whole
-   document and uses [React 19's metadata hoisting](#managing-the-document-head) instead of
-   react-helmet — render `<title>` / `<meta>` directly in your components:
+2. **Pass React Router into `renderWithSSR`.** The package no longer imports React Router
+   itself — you inject it. This is what makes React Router 7/8 (including v8's ESM-only build)
+   work under Meteor's package build stack, and it guarantees a single shared React Router
+   instance:
 
    ```diff
-   -import { Helmet } from "react-helmet";
-   -
-    function ProfilePage() {
-      return (
-        <>
-   -      <Helmet>
-   -        <title>Profile</title>
-   -      </Helmet>
-   +      <title>Profile</title>
-          {/* … */}
-        </>
-      );
-    }
+   +import * as ReactRouter from "react-router";
+
+   -renderWithSSR(AppRoutes);
+   +renderWithSSR(AppRoutes, { reactRouter: ReactRouter });
    ```
 
-3. **Remove the mount element and static `<head>`.** v6 renders the entire `<html>` document,
-   so a `<div id="react-target">` or a hand-written `<head>` in a static HTML file is no longer
-   used — delete them. `renderWithSSR` no longer takes an options argument; the `renderTarget`
-   option has been removed:
+3. **Remove the Rspack externals config.** If you added `compileWithMeteor([...])` for
+   react-router to `rspack.config.js` (required in v6), **delete it** — with injection there is
+   one shared React Router instance and nothing to externalize. No bundler configuration is
+   needed at all.
 
-   ```diff
-   -renderWithSSR(AppRoutes, { renderTarget: "react-app" });
-   +renderWithSSR(AppRoutes);
-   ```
-
-4. **Using the Rspack bundler?** Add one bit of server config so react-router isn't duplicated
-   during SSR — see [Using with the Rspack bundler](#using-with-the-rspack-bundler).
+If you are still on React Router 6, stay on `react-router-ssr@6`.
 
 ## Package Exports 📦
 
-**`renderWithSSR(routes)`** - Isomorphic app rendering. Renders and hydrates the whole
-`<html>` document, so there is no mount element to configure.
+**`renderWithSSR(routes, { reactRouter })`** - Isomorphic app rendering. Renders and hydrates
+the whole `<html>` document, so there is no mount element to configure.
 
 - `routes` - A JSX element or array of JSX elements that represent the routes of your app.
+- `reactRouter` **(required)** - Your app's React Router module, i.e. the result of
+  `import * as ReactRouter from "react-router"`. The package uses the router primitives from
+  this module rather than importing React Router itself (see [Usage](#usage) for why).
 
   ```js
+  import * as ReactRouter from "react-router";
   import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 
   const AppRoutes = [
@@ -89,12 +79,12 @@ changes to make — most are deletions.
     { path: "/about", element: <About /> },
   ]
 
-  renderWithSSR(AppRoutes);
+  renderWithSSR(AppRoutes, { reactRouter: ReactRouter });
   ```
 
 **`useSubscribeSuspense(name, ...args)`** - A server enabled version of `react-meteor-data`'s suspendable `useSubscribe` hook. Arguments are same as `Meteor.subscribe`.
 
-## Usage ⚙️
+## Usage
 
 This package renders and hydrates the **entire `<html>` document** — it produces its own
 `<html>`, `<head>`, and `<body>`. You do **not** need a mount element (`<div id="…">`) or a
@@ -102,10 +92,12 @@ hand-written `<head>` in a static HTML file; anything you put there is replaced 
 Configure the `<head>` from your components instead — see
 [Managing the document head](#managing-the-document-head).
 
-Call `renderWithSSR` from shared code, such as a `/both/main.jsx` file, or a file that is
-imported into your `mainModule` for both the client and server.
+**Import React Router in your app and pass it to `renderWithSSR`.** Call it from shared code,
+such as a `/both/main.jsx` file, or a file imported into your `mainModule` for both the client
+and server.
 
 ```jsx
+import * as ReactRouter from "react-router";
 import { renderWithSSR } from "meteor/communitypackages:react-router-ssr";
 
 import React from "react";
@@ -128,8 +120,17 @@ const AppRoutes = [
 //   </>
 // );
 
-renderWithSSR(AppRoutes);
+renderWithSSR(AppRoutes, { reactRouter: ReactRouter });
 ```
+
+### Why does my app pass React Router in?
+
+Meteor packages are compiled by Meteor's package build stack, which cannot consume React Router
+7/8's ESM (it uses `import.meta`). Your app's code, however, is bundled by your app's bundler
+(e.g. Rspack), which handles it fine. So instead of importing React Router itself, this package
+takes the module you import in your app. A useful side effect: there is then only ever **one**
+React Router instance (your app's), shared with the package by reference — so there is no
+duplicate-context problem and **no bundler externals configuration is required**.
 
 ## Managing the document head
 
@@ -162,41 +163,14 @@ During SSR the correct title/meta are streamed into the served HTML, and on
 client-side navigation React updates them as the matched route changes — no
 extra library or provider required.
 
-## Using with the Rspack bundler
+## Bundler configuration
 
-If your app uses Meteor's [Rspack bundler](https://docs.meteor.com/about/modern-build-stack/rspack-bundler-integration)
-(`@meteorjs/rspack`), one small piece of configuration is required for SSR to work.
+**None is required.** Because your app imports React Router and passes it in (see
+[Usage](#usage)), there is a single React Router instance shared between your app and this
+package, so there is nothing to deduplicate or externalize — this works with Meteor's Rspack
+bundler and the classic bundler alike.
 
-Rspack bundles your app's code separately from this Meteor-compiled package, in its own
-module registry. That means Rspack bundles its own copy of `react-router`, distinct from the
-copy this package loads. React Router shares its routing state through React context, and
-React context only works across a *single* shared instance — so with two copies the package's
-`<RouterProvider>` / `<StaticRouterProvider>` can't supply context to a `<Link>` / `<NavLink>`
-in your components. This breaks **both** builds:
-
-- **Server:** SSR fails with `TypeError: Cannot destructure property 'future' of 'useContext(...)' as it is null`.
-- **Client:** after hydration, `<NavLink>` throws and React Router renders its error boundary.
-
-Rspack already externalizes `react` and `react-dom` for exactly this reason — `react-router`
-just isn't in its default list. Add it yourself in `rspack.config.js` with Meteor's
-[`compileWithMeteor`](https://docs.meteor.com/about/modern-build-stack/rspack-bundler-integration)
-helper, which tells Rspack to let Meteor provide these packages at runtime (one shared instance
-instead of a bundled duplicate). Apply it to **both** the client and server builds:
-
-```js
-const { defineConfig } = require("@meteorjs/rspack");
-
-module.exports = defineConfig((Meteor) => ({
-  // Externalize react-router so it isn't duplicated across the Meteor/Rspack build
-  // boundary (see above). Needed on both client and server.
-  ...Meteor.compileWithMeteor([
-    "react-router",
-    "react-router-dom",
-    "@remix-run/router",
-  ]),
-}));
-```
-
-> This only affects apps using the Rspack bundler. With Meteor's classic bundler your app
-> code and this package share one module registry, so there is nothing to configure.
+> Upgrading from v6? v6 required a `compileWithMeteor([...])` externals block in
+> `rspack.config.js` to share a single react-router copy. With injection that's no longer
+> needed — **delete it.**
 

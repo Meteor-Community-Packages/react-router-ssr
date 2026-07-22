@@ -10,7 +10,7 @@ check@1.5.0
 communitypackages:fast-render@5.0.0
 communitypackages:inject-data@3.0.0
 communitypackages:picker@2.0.0
-communitypackages:react-router-ssr@6.0.0
+communitypackages:react-router-ssr@7.0.0
 core-runtime@1.0.0
 ddp@1.4.2
 ddp-client@3.3.0

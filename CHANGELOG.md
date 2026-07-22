@@ -1,5 +1,37 @@
 # Change Log
 
+## 7.0.0
+
+Adds **React Router 7 and 8** support (including v8's ESM-only build) by having the app inject
+React Router into the package. See the
+[Upgrading from v6](README.md#upgrading-from-v6) section of the README.
+
+### Breaking changes
+
+- **React Router is now provided by the app**, not imported by the package. `renderWithSSR`
+  takes it as an option:
+
+  ```diff
+  +import * as ReactRouter from "react-router";
+  -renderWithSSR(routes);
+  +renderWithSSR(routes, { reactRouter: ReactRouter });
+  ```
+
+  Meteor's package build stack cannot consume React Router 7/8's ESM (`import.meta`), but your
+  app's bundler can — so the package no longer imports React Router itself. This is what makes
+  React Router 7/8 work, and it guarantees a single shared React Router instance.
+- **React Router 7 or 8 is required** (was React Router 6). Update your app's imports from
+  `react-router-dom` to `react-router`. React Router 6 users should stay on `react-router-ssr@6`.
+
+### Removed
+
+- **No bundler externals configuration is needed anymore.** v6 required a
+  `compileWithMeteor(["react-router", …])` block in `rspack.config.js` to avoid duplicate
+  react-router copies; with injection there is a single shared instance, so that config should
+  be deleted.
+- The `react-router` npm-version check was dropped — the package is now agnostic to which React
+  Router major the app injects (it still requires React 19).
+
 ## 6.0.0
 
 A rewrite around React 19 and whole-document server rendering. See the
