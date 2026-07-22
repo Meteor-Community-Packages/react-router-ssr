@@ -2,13 +2,21 @@ import { FastRender } from 'meteor/communitypackages:fast-render';
 
 import React, { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
-import { RouterProvider, createRoutesFromElements, createBrowserRouter } from 'react-router-dom';
 
+import { resolveReactRouter } from './resolve-react-router';
 import './version-check';
 
 export * from './both';
 
-const renderWithSSR = (routes) => {
+// React Router is provided by the app (dependency injection) rather than imported by this
+// package. The package is compiled by Meteor's package build stack, which cannot consume React
+// Router v7+ ESM (it uses `import.meta`); the app's code is bundled by its own bundler (Rspack),
+// which handles it fine. Passing the module in also guarantees a single React Router instance
+// shared between the app and this package, so there is no duplicate-context/dual-instance issue
+// and no bundler externals config is required. See the README.
+const renderWithSSR = (routes, { reactRouter } = {}) => {
+  const { RouterProvider, createRoutesFromElements, createBrowserRouter } = resolveReactRouter(reactRouter);
+
   if (!Array.isArray(routes)) {
     routes = createRoutesFromElements(routes);
   }

@@ -5,11 +5,10 @@ import { InjectData } from 'meteor/communitypackages:inject-data';
 import { Headers, Request } from 'meteor/fetch';
 import { Writable } from 'stream';
 import React, { StrictMode } from 'react';
-import { createRoutesFromElements } from 'react-router-dom';
-import { StaticRouterProvider, createStaticHandler, createStaticRouter } from 'react-router-dom/server';
 import { renderToPipeableStream } from 'react-dom/server';
 import AbortController from 'abort-controller';
 import { isAppUrl } from './helpers';
+import { resolveReactRouter } from './resolve-react-router';
 
 // This import just silences warnings from the check-npm-versions package because the
 // import above has /server at the end and meteor won't bundle the package.json file for these.
@@ -18,7 +17,11 @@ import './version-check';
 
 export * from './both';
 
-const renderWithSSR = async (routes) => {
+// React Router is provided by the app (dependency injection) rather than imported here — see
+// the note in client.jsx and the README for why.
+const renderWithSSR = async (routes, { reactRouter } = {}) => {
+  const { createRoutesFromElements, StaticRouterProvider, createStaticHandler, createStaticRouter } = resolveReactRouter(reactRouter);
+
   if (!Array.isArray(routes)) {
     routes = createRoutesFromElements(routes);
   }
