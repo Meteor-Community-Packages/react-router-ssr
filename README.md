@@ -173,3 +173,14 @@ bundler and the classic bundler alike.
 > Upgrading from v6? v6 required a `compileWithMeteor([...])` externals block in
 > `rspack.config.js` to share a single react-router copy. With injection that's no longer
 > needed — **delete it.**
+
+### CSS under the Rspack bundler
+
+If your app's CSS goes through Rspack (e.g. Tailwind via a `postcss-loader` rule, as in
+Meteor's `--tailwind` skeleton), the Rspack integration delivers the compiled stylesheet as a
+`<link>` in the boilerplate head fragment, which it contributes through `static-html`. This
+package carries those links into the rendered document (since 7.0.1), but the fragment has to
+exist for that to work: **keep the `static-html` package and a `client/main.html`** — an empty
+`<head></head>` is enough. Everything else in that file is replaced by the rendered document,
+so don't put content there; manage the head from your components instead (see
+[Managing the document head](#managing-the-document-head)).

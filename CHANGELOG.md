@@ -1,5 +1,30 @@
 # Change Log
 
+## 7.0.1
+
+Compatibility fixes for Meteor 3.5 (webapp 2.2.0) and the Rspack bundler. No API changes.
+
+### Fixed
+
+- **SSR 500 on every request under Meteor 3.5.** webapp now passes the *categorized* request
+  to boilerplate data callbacks: the pathname lives at `req.path` and `req.url` is
+  `{ query }` — `req.url.pathname` no longer exists. `isAppUrl` and the router's fetch-request
+  construction now accept all request shapes (categorized, legacy parsed URL, raw string) and
+  preserve the query string, which was previously dropped even on older webapp versions.
+- **Unstyled pages under the Rspack bundler.** Meteor's Rspack integration delivers the app's
+  compiled CSS as a `<link>` in the boilerplate *head fragment* (contributed via
+  `static-html`), not in the css manifest this package rendered from — so the SSR'd document
+  dropped it and the app rendered with no styles at all (in development the link points at the
+  Rspack dev server; in production at the emitted css chunk). Stylesheet links found in the
+  boilerplate head fragment are now carried into the rendered `<head>` and into the client's
+  `window.styleTagUrls` hydration config, so server and client markup stay identical.
+  Rspack apps must keep `static-html` (and a `client/main.html`; an empty `<head></head>` is
+  enough) so the integration has a head fragment to deliver the link through.
+- **Hydration mismatch warning for `<html>` attributes.** Apps legitimately set attributes on
+  `<html>` (theming's `data-theme`/`data-org`, `lang`) from inline scripts that run before
+  hydration. React 19 leaves unknown attributes in place, so the warning was pure noise —
+  suppressed via `suppressHydrationWarning` on the package-rendered `<html>` element.
+
 ## 7.0.0
 
 Adds **React Router 7 and 8** support (including v8's ESM-only build) by having the app inject

@@ -7,7 +7,7 @@ import { Writable } from 'stream';
 import React, { StrictMode } from 'react';
 import { renderToPipeableStream } from 'react-dom/server';
 import AbortController from 'abort-controller';
-import { isAppUrl } from './helpers';
+import { isAppUrl, requestPathname } from './helpers';
 import { resolveReactRouter } from './resolve-react-router';
 
 // This import just silences warnings from the check-npm-versions package because the
@@ -43,10 +43,28 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
       context,
     );
 
-    const { meteorRuntimeConfig, css = [], js = [] } = data || {};
+    const { meteorRuntimeConfig, css = [], js = [], head = '' } = data || {};
 
     const styleTagUrls = (css || []).map(file => file.url);
     const scriptTagUrls = (js || []).map(file => file.url);
+
+    // The Rspack bundler integration delivers the app's compiled CSS as a
+    // <link> in the boilerplate *head fragment* (via static-html), not in
+    // the css manifest — in development it points at the dev server
+    // (/build-chunks/main.css → /__rspack__/…). Because we render our own
+    // document from the manifest, that link would be dropped and the app
+    // would render unstyled. Carry stylesheet links from the head fragment
+    // into styleTagUrls; this also reaches the client via the
+    // window.styleTagUrls config, so hydration markup stays identical.
+    if (head) {
+      const linkTags = head.match(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi) || [];
+      for (const tag of linkTags) {
+        const href = tag.match(/href=["']([^"']+)["']/i);
+        if (href && !styleTagUrls.includes(href[1])) {
+          styleTagUrls.push(href[1]);
+        }
+      }
+    }
 
     // When the app is built with the Rspack bundler in development, the app's client bundle is
     // served by the Rspack HMR dev server and the normal Meteor boilerplate loads it with a
@@ -71,7 +89,11 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
 
     const AppJSX = () => {
       return (
-        <html>
+        // suppressHydrationWarning: apps may set attributes on <html>
+        // (theming's data-theme/data-org, lang) from inline scripts before
+        // hydration; React 19 leaves unknown attributes in place, so the
+        // mismatch warning is noise.
+        <html suppressHydrationWarning>
           <head>
             {/*
               No <title>/<meta> here on purpose. Under React 19, document metadata
@@ -155,7 +177,6 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
 
 function createFetchRequest (request) {
   const sinkHeaders = request.headers;
-  const url = request.url;
 
   const headers = new Headers();
 
@@ -179,8 +200,22 @@ function createFetchRequest (request) {
     signal: controller.signal,
   };
 
+  // Pathname + query across webapp request shapes (see helpers.js):
+  // categorized requests carry a parsed `url.query` object; legacy and
+  // raw shapes carry search on the URL itself.
+  const pathname = requestPathname(request);
+  let search = '';
+  if (request.url && typeof request.url === 'object' && request.url.query) {
+    const qs = new URLSearchParams(request.url.query).toString();
+    search = qs ? `?${qs}` : '';
+  } else if (typeof request.url === 'string') {
+    search = new URL(request.url, 'http://localhost').search;
+  } else if (request.url && typeof request.url.search === 'string') {
+    search = request.url.search;
+  }
+
   const baseUrl = getBaseUrlFromHeaders(sinkHeaders);
-  const fullUrl = `${baseUrl}${url.pathname || ''}`;
+  const fullUrl = `${baseUrl}${pathname}${search}`;
   const newUrl = new URL(fullUrl);
   return new Request(newUrl, init);
 };

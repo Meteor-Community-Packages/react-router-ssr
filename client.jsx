@@ -35,7 +35,9 @@ const renderWithSSR = (routes, { reactRouter } = {}) => {
 
   const AppJSX = () => {
     return (
-      <html>
+      // Matches server.jsx: attributes set on <html> by pre-hydration
+      // scripts (data-theme/data-org) are intentional, not mismatches.
+      <html suppressHydrationWarning>
         <head>
           {/*
             No <title>/<meta> here — React 19 hoists document metadata rendered by route
