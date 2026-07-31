@@ -169,6 +169,10 @@ describe('the decline check and the router must agree on the path', function () 
         `${target} was served the app document; the router would route it as ${normalized}`,
       );
       assert.strictEqual(res.status, 404, `${target} should be a 404, got ${res.status}`);
+      // Same endDeclinedRequest path as the /__cordova targets, so it owes the
+      // same headers.
+      assert.strictEqual(res.headers['cache-control'], 'no-store');
+      assert.match(res.headers['content-type'] || '', /text\/plain/);
     });
   }
 

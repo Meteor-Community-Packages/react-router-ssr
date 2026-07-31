@@ -397,6 +397,15 @@ describe('requestRoutedUrl (the exported helper consumers must not reimplement)'
       const url = await pinned('/', { Host: '999.999.999.999' });
       assert.strictEqual(url.origin, 'https://pinned.test:8443');
     });
+
+    it('the ROOT_URL pin did not leak out of the probe', async () => {
+      // The probe mutates global state and restores it in a `finally`. That
+      // invariant is load-bearing and otherwise untested: delete the try/finally
+      // and every run still reports green, because the assertions the leak would
+      // corrupt happen to be ordered before it.
+      const url = await probe('/', { Host: 'not a host' });
+      assert.strictEqual(url.origin, FALLBACK_ORIGIN);
+    });
   });
 
   it('does not throw for any input, including null', async () => {
@@ -469,5 +478,82 @@ describe('requestRoutedUrl (the exported helper consumers must not reimplement)'
         `helper href "${helper.href}" !== renderer "${renderedUrl}" for ${label}`,
       );
     }
+  });
+});
+
+// Every claim the README and CHANGELOG make about what this package does NOT
+// protect you from. Three review rounds in a row found a false statement in the
+// exposure notes, each one reasoned-from-the-code rather than executed. These
+// execute them, so the docs cannot drift from the behaviour they describe.
+describe('claims made in the published security notes', function () {
+  this.timeout(20000);
+
+  it('a foreign but valid Host IS reflected into the origin loaders see', async () => {
+    // Documented as by-design, and the reason the notes say the origin is
+    // untrusted. If this ever stops being true the notes must change too.
+    const res = await render('/events/e1', { Host: 'evil.example' });
+    assert.strictEqual(routeOf(res), 'EVENT');
+    const loaderUrl = new URL(marker(res.body, 'loader-url'));
+    assert.strictEqual(loaderUrl.host, 'evil.example');
+    assert.strictEqual(loaderUrl.pathname, '/events/e1');
+  });
+
+  it('X-Forwarded-Host is not consulted anywhere', async () => {
+    const res = await render('/events/e1', {
+      Host: `localhost:${PORT}`,
+      'X-Forwarded-Host': 'evil.example',
+    });
+    const loaderUrl = new URL(marker(res.body, 'loader-url'));
+    assert.strictEqual(
+      loaderUrl.host,
+      `localhost:${PORT}`,
+      'X-Forwarded-Host reached the origin; the security notes say it never does',
+    );
+  });
+
+  it('search is a normalized re-serialization, not the raw query bytes', async () => {
+    const res = await render('/events/e1?a=b%20c&flag');
+    assert.strictEqual(marker(res.body, 'routed-search'), '?a=b+c&flag=');
+  });
+
+  it('repeated query keys are lossy, in a webapp-version-dependent way', async () => {
+    // webapp 2.2.0 keeps the last value (Object.fromEntries); 2.1.2 comma-joins.
+    // The suite runs on both, so accept either — the documented point is that
+    // the raw bytes do not survive.
+    const res = await render('/events/e1?a=1&a=2');
+    const search = marker(res.body, 'routed-search');
+    assert.ok(
+      search === '?a=2' || search === '?a=1%2C2',
+      `expected webapp 2.2.0's "?a=2" or 2.1.2's "?a=1%2C2", got ${search}`,
+    );
+    assert.notStrictEqual(search, '?a=1&a=2', 'raw repeated keys are documented as not surviving');
+  });
+
+  it('the decline rules are syntactic: /%5F%5Fcordova/x is NOT declined', async () => {
+    // Documented, deliberately unfixed: it fails safe, rendering the catch-all
+    // for a URL that does not exist rather than declining something it should
+    // have rendered.
+    const res = await render('/%5F%5Fcordova/x');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(routeOf(res), 'NOT-FOUND');
+  });
+
+  it('the rendered document does not Vary on the headers that steered it', async () => {
+    // The advisory calls the pre-7.1.0 bug a cache-poisoning primitive. That
+    // rests on the response body having depended on request headers that the
+    // response never declares in `Vary`, so a shared cache would key the
+    // attacker's variant under the victim's URL.
+    //
+    // Note the response DOES carry `Vary: Accept-Encoding` from Meteor's
+    // compression middleware — the claim is specifically about `Host` and
+    // `X-Forwarded-Proto`, so assert that rather than the absence of Vary.
+    const res = await render('/');
+    assert.strictEqual(res.status, 200);
+    const vary = (res.headers.vary || '').toLowerCase();
+    assert.ok(!vary.includes('host'), `Vary unexpectedly lists host: ${res.headers.vary}`);
+    assert.ok(
+      !vary.includes('x-forwarded-proto'),
+      `Vary unexpectedly lists x-forwarded-proto: ${res.headers.vary}`,
+    );
   });
 });

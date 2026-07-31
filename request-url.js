@@ -225,6 +225,11 @@ const categorize = (req) => {
 const rawTargetPathname = (target) => {
   // Absolute-form request targets (`GET http://host/path HTTP/1.1`) are legal
   // for proxies; `parseurl`, and therefore webapp, reports only the path part.
+  //
+  // Known divergence, accepted: a single-slash scheme target (`http:/foo`) is
+  // not matched here and comes back as `/http:/foo`, where `parseurl` gives
+  // `/foo`. This function only runs when `WebApp.categorizeRequest` is absent
+  // or threw, so the case is unreachable on any webapp that still has it.
   const origin = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.exec(target);
   const rest = origin ? target.slice(origin[0].length) : target;
   const cut = rest.search(/[?#]/);

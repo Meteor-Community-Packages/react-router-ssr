@@ -12,7 +12,11 @@ onward is affected by the security issue below; all of them should upgrade.**
   headers:
 
   ```js
-  `${headers['x-forwarded-proto']}://${headers.host}${pathname}${search}`
+  // 6.0.0, 7.0.0, 7.0.1 — verbatim
+  const forwardedProto = headers['x-forwarded-proto'];
+  const protocol = (forwardedProto ? forwardedProto.split(',')[0].trim() : '') || 'http';
+  const baseUrl = `${protocol}://${headers.host}`;
+  const newUrl = new URL(`${baseUrl}${pathname}${search}`);
   ```
 
   Neither header was validated, so a client could close the origin early and append its own
@@ -34,8 +38,10 @@ onward is affected by the security issue below; all of them should upgrade.**
   and anything a route loader derives from `request.url` all come from the injected path.
   A reverse proxy is **not** a mitigation: `x-forwarded-proto` was read as the *first*
   comma-separated hop, which under the usual appending-proxy configuration is the value the
-  client supplied. If a cache sits in front of the app, this is also a cache-poisoning
-  primitive.
+  client supplied. If a shared cache sits in front of the app, this is also a cache-poisoning
+  primitive: the rendered document depended on `Host` and `X-Forwarded-Proto`, and the
+  response never listed either in `Vary`, so the attacker's variant could be stored under the
+  victim's URL.
 
   **Affected versions: every published release from 5.0.0 through 7.0.1**, i.e. `5.0.0`,
   `6.0.0-beta.1`, `6.0.0-beta.2`, `6.0.0`, `7.0.0` and `7.0.1`. The header-derived base URL
@@ -44,17 +50,28 @@ onward is affected by the security issue below; all of them should upgrade.**
 
   | versions | base URL expression | `X-Forwarded-Proto` steers? | `Host` **alone** steers? |
   | --- | --- | --- | --- |
-  | `5.0.0`, `6.0.0-beta.1`, `6.0.0-beta.2` | `${protocol ? '${protocol}:' : ''}//${host}` | **yes** | no — a path in `Host` yields an unparseable URL and a 500 |
-  | `6.0.0`, `7.0.0`, `7.0.1` | `${protocol}://${host}` | **yes** | **yes** |
+  | `5.0.0`, `6.0.0-beta.1`, `6.0.0-beta.2` | `${protocol ? '${protocol}:' : ''}//${host}` | **yes** | **yes, whenever any single-scheme `X-Forwarded-Proto` is present** — i.e. behind essentially any reverse proxy. Only when the header is absent entirely, or holds a comma-joined value, does the URL fail to parse and 500 instead |
+  | `6.0.0`, `7.0.0`, `7.0.1` | `${protocol}://${host}` | **yes** | **yes, unconditionally** — the `'http'` default means no header is needed at all |
 
-  Note especially that **`6.0.0` — the current published 6.x — behaves like 7.0.x, not like the
-  6.0.0 betas.** It already carries the `${protocol}://${host}` form with the `'http'` default.
-  So on `6.0.0`, `7.0.0` and `7.0.1`, `Host: app.example.com/pricing#` steers the route on its
-  own, with no `X-Forwarded-Proto` involved. **If your edge strips or normalises
-  `X-Forwarded-Proto`, that is not a mitigation on those versions.**
+  Two things to be clear about, because getting either wrong leads to a wrong exposure
+  assessment:
+
+  - **`6.0.0` — the current published 6.x — behaves like 7.0.x, not like the 6.0.0 betas.** It
+    already carries the `${protocol}://${host}` form with the `'http'` default.
+  - **Normalising `X-Forwarded-Proto` at your edge is not a mitigation on any affected
+    version, and on `5.0.0`/`6.0.0-beta.x` it is what *enables* the `Host`-only attack.** On
+    those versions a bare `Host: app.example.com/pricing#` with no `X-Forwarded-Proto` throws
+    and 500s — but add the entirely ordinary `proxy_set_header X-Forwarded-Proto $scheme` that
+    nginx, Galaxy's load balancer, an ALB, Cloudflare and Meteor's own dev proxy all set, and
+    the same request steers the route cleanly. On `6.0.0`/`7.0.x` it works with or without any
+    proxy. Only *stripping* the header entirely produces the 500, and only on 5.0.0/6.0.0-beta.
+
+  Backslash (`Host: app.example.com\pricing#`) and percent-encoded (`/%70ricing#`) spellings
+  work on every affected version.
 
   **1.x–4.x are not affected**: they passed the request path straight to `StaticRouter` and
-  never derived an origin from request headers.
+  never derived an origin from request headers. (Verified by grepping every published tag from
+  `v1.0.0` to `v4.0.0` for any use of `x-forwarded-*` or `headers.host`: none.)
 
   Fixed in two independent ways, either of which stops the routing attack on its own:
 
@@ -78,8 +95,9 @@ onward is affected by the security issue below; all of them should upgrade.**
   Host: evil.example
   ```
 
-  still yields `request.url === "http://evil.example/events/e1"` inside your route loaders,
-  and the same from `requestRoutedUrl(req).origin`. This is **by design** — host-routed
+  still yields a `request.url` whose host is `evil.example` inside your route loaders (the
+  scheme comes from `x-forwarded-proto` or `ROOT_URL` — see *Changed* below), and the same
+  from `requestRoutedUrl(req).origin`. This is **by design** — host-routed
   multi-tenant apps must be able to see the requested host, and pinning the origin to
   `ROOT_URL` would break them — but it means the origin is attacker-controlled input.
 
@@ -115,6 +133,25 @@ onward is affected by the security issue below; all of them should upgrade.**
 
   Treat `pathname` as the trustworthy output, `search` as trustworthy-but-normalized, and the
   origin as untrusted.
+
+### Changed
+
+- **The scheme of the URL your loaders see now comes from `ROOT_URL` when the request carries
+  no usable `x-forwarded-proto`.** Through 7.0.1 it was hardcoded to `http`. A valid
+  `x-forwarded-proto` (`http` or `https`, first hop) still wins, and the host is unaffected —
+  this only changes the scheme, and only on requests where the header is absent or unusable.
+
+  **This changes `request.url` for existing apps.** If `ROOT_URL` is `https://…` and your
+  Meteor process is reached over plain HTTP by something that sets no `x-forwarded-proto` — a
+  TCP-passthrough load balancer, an Ingress without the header, a health check, a sidecar —
+  then every value derived from `request.url` flips from `http:` to `https:` on upgrade.
+  Check any loader or action that builds a *fetchable* URL from it, e.g.
+  `fetch(new URL("/api/internal", request.url))`: that call now goes out over https and will
+  fail if the port behind the terminator only speaks http. Absolute URLs emitted into HTML
+  (canonical links, `og:url`) get *more* correct, which is the reason for the change — an
+  https site was previously advertising `http://` URLs to crawlers.
+
+  If you need the old behaviour, have your proxy set `X-Forwarded-Proto: http` explicitly.
 
 ### Fixed
 
@@ -159,7 +196,8 @@ onward is affected by the security issue below; all of them should upgrade.**
 - **The published isopack no longer contains the repo's `node_modules` or test app.** Meteor's
   package source walk (unlike an app's) excludes neither, and adds every file it finds as a
   lazy module: built from a working tree with dev dependencies installed, the isopack was
-  ~148 MB / 167 source resources instead of ~504 K / 7. Previously the only thing keeping that
+  roughly 150 MB and 167 source resources, instead of well under a megabyte
+  and the 7 files this package actually ships. Previously the only thing keeping that
   out of a release was the `rimraf ./node_modules` in the `publish-release` npm script. A
   `.meteorignore` now excludes both, so a correct result no longer depends on remembering to
   publish through that one script — `rimraf` stays as a second line of defence on an

@@ -28,6 +28,19 @@ This project, like all of the projects maintained by the Meteor Community Packag
    meteor add communitypackages:react-router-ssr
    ```
 
+### Which Meteor versions this actually works on
+
+> ⚠️ **`package.js` declares `api.versionsFrom('METEOR@3.0.1')`, but that floor does not
+> work — and has not since before 7.1.0.** On METEOR@3.0.1 (webapp 2.0.4) `renderWithSSR`
+> renders no app markup at all; the test suite reports 23 passing / 50 failing there on
+> 7.1.0, and 5 passing / 68 failing on 7.0.1.
+>
+> **Verified working: Meteor 3.4.1 (webapp 2.1.2) and Meteor 3.5 (webapp 2.2.0)** — the suite
+> is 80 passing on both. The true minimum is somewhere above 3.0.1 and at or below 3.4.1; it
+> has not been pinned down because the intermediate releases could not be built for testing.
+> If you are on 3.1–3.3, test before relying on it. The declared floor is left unchanged
+> rather than raised to a number that is equally unmeasured.
+
 ## Upgrading from v6
 
 v7 adds React Router 7 and 8 support (v6 supported React Router 6) and changes how React Router
@@ -147,8 +160,8 @@ GET /events/e1 HTTP/1.1
 Host: evil.example
 ```
 
-gives `requestRoutedUrl(req).origin === "http://evil.example"`, and the same value reaches
-`request.url` inside your React Router loaders and actions. Treat it as attacker input:
+gives a URL whose host is `evil.example` — and the same value reaches `request.url` inside
+your React Router loaders and actions. Treat it as attacker input:
 
 - **Do not redirect to an absolute URL built from it.** React Router's common idiom
   `redirect(new URL("/login", request.url))` becomes an open redirect to the attacker's host.
@@ -179,9 +192,13 @@ Two more things worth knowing when you assess exposure:
 
 1. **Scheme** — the first comma-separated hop of `X-Forwarded-Proto` if it is exactly `http`
    or `https`; otherwise `ROOT_URL`'s scheme; otherwise `http`.
-2. **Host** — the `Host` header, if it is a plausible authority (registered name or bracketed
-   IPv6 literal, optional port, and none of `/ \ # ? @`, whitespace or control characters)
-   *and* `new URL()` accepts it. Otherwise `ROOT_URL`'s host, and finally `localhost`.
+2. **Host** — the `Host` header, if it is a plausible authority *and* `new URL()` accepts it.
+   "Plausible" is a conservative whitelist: a registered name of unreserved characters only
+   (`A–Z a–z 0–9 . _ ~ -`) or a bracketed IPv6 literal, with an optional numeric port. It
+   admits none of `/ \ # ? @`, whitespace or control characters — and, erring on the safe
+   side, it also rejects sub-delims, percent-encodings and IPv6 zone identifiers, which are
+   technically legal in an authority. Anything it rejects falls back to `ROOT_URL`'s host, and
+   finally to `localhost`.
 
 The path and query are then applied with the `URL` object's `pathname`/`search` setters, never
 by string concatenation, so no part of the path can reach the authority.
@@ -336,7 +353,7 @@ and asserts they agree on pathname, search, origin and href, which is what makes
 tests meaningful.
 
 > **Note:** a Meteor boot failure prints `0 passing` with no failures, which reads as green.
-> Always check the *count* — as of 7.1.0 the suite is **73 passing**.
+> Always check the *count* — as of 7.1.0 the suite is **80 passing**.
 
 ### What the suite does not cover
 
@@ -346,7 +363,7 @@ tests meaningful.
   installed. Server rendering, request handling and URL derivation are covered; hydration is
   not.
 - **Only recent Meteor releases.** The suite is run on **Meteor 3.5** (webapp 2.2.0) and
-  **Meteor 3.4.1** (webapp 2.1.2) — 73 passing on both, which is what gives the
+  **Meteor 3.4.1** (webapp 2.1.2) — 80 passing on both, which is what gives the
   webapp-version-dependent query behaviour described above real coverage.
 
   ⚠️ **`package.js` declares `api.versionsFrom('METEOR@3.0.1')`, and that floor does not

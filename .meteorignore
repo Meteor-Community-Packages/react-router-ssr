@@ -2,8 +2,9 @@
 #
 # Meteor's package source walk (unlike an app's) excludes NEITHER of these by
 # default, and every file it finds is added to the isopack as a lazy module.
-# Without these entries the built isopack is ~150 MB / 167 source resources
-# instead of ~500 K / 7.
+# Without these entries the built isopack is roughly 150 MB and 167 source
+# resources, instead of well under a megabyte and the 7 files this package
+# actually ships.
 
 # Dev-only tooling (eslint, markdownlint, husky). Only the `publish-release`
 # npm script's `rimraf ./node_modules` kept this out of releases before — a
