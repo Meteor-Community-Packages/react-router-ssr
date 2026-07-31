@@ -63,12 +63,37 @@ if (Meteor.isAppTest || Meteor.isTest) {
             }
           }),
         };
+      } else if (mode === 'root-url-scheme') {
+        // Pin ROOT_URL to an https origin so the derived scheme cannot be
+        // mistaken for a hardcoded 'http'. `Meteor.absoluteUrl.defaultOptions`
+        // is global state, but this block is entirely synchronous — there is no
+        // await between the swap and the restore, so no other request can
+        // observe the pinned value.
+        const saved = Meteor.absoluteUrl.defaultOptions.rootUrl;
+        Meteor.absoluteUrl.defaultOptions.rootUrl = 'https://pinned.test:8443';
+        try {
+          payload = {
+            ...describeUrl(requestRoutedUrl(req)),
+            pinnedRootUrl: Meteor.absoluteUrl(),
+          };
+        } finally {
+          Meteor.absoluteUrl.defaultOptions.rootUrl = saved;
+        }
       } else if (mode === 'raw-fallback') {
         // Force the branch where webapp's categorization is unusable.
         // `pathname: ''` makes webapp's own implementation throw (it calls
         // .startsWith() on `''.split('/')[1]`, which is undefined), so this
         // exercises the real catch branch rather than a stubbed one.
-        const synthetic = { url: req.url, headers: req.headers, pathname: '' };
+        //
+        // The fixture carries an express-style `path` getter on purpose: the
+        // fallback must not read it, and without one the test asserting so
+        // would have nothing to fail into.
+        const synthetic = {
+          url: req.url,
+          headers: req.headers,
+          pathname: '',
+          get path () { return req.path; },
+        };
         let webappThrew = false;
         try {
           WebApp.categorizeRequest(synthetic);
@@ -78,6 +103,8 @@ if (Meteor.isAppTest || Meteor.isTest) {
         payload = {
           ...describeUrl(requestRoutedUrl(synthetic)),
           webappCategorizeThrew: webappThrew,
+          fixtureHasExpressPathGetter: typeof synthetic.path === 'string',
+          fixtureExpressPath: synthetic.path,
         };
       } else {
         payload = {

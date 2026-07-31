@@ -309,8 +309,39 @@ describe('requestRoutedUrl (the exported helper consumers must not reimplement)'
 
     it('strips the /__<arch> segment itself rather than reporting express req.path', async () => {
       const url = await probeMode('raw-fallback', '/__browser/admin');
+      assert.strictEqual(
+        url.fixtureHasExpressPathGetter,
+        true,
+        'the fixture exposes no req.path getter, so this test has nothing to fail into',
+      );
+      assert.strictEqual(url.fixtureExpressPath, '/__browser/admin', 'req.path is the un-stripped value');
       assert.strictEqual(url.pathname, '/admin');
     });
+
+    // Ordering defect found in review: webapp strips /__<arch> from the RAW
+    // pathname, and dot segments are removed afterwards by the url.pathname
+    // setter. Normalizing first inverts that and disagrees with the renderer.
+    const orderingCases = [
+      ['/x/../__browser/pricing', '/__browser/pricing'],
+      ['/./__browser/admin', '/__browser/admin'],
+      ['/%2E%2E/__browser/x', '/__browser/x'],
+    ];
+
+    for (const [target, expected] of orderingCases) {
+      it(`strips the arch segment in webapp's order for ${target}`, async () => {
+        const url = await probeMode('raw-fallback', target);
+        assert.strictEqual(url.pathname, expected);
+
+        // …and it must equal what the renderer actually routes for that target.
+        const rendered = await render(target);
+        const renderedPath = marker(rendered.body, 'routed-pathname');
+        assert.strictEqual(
+          url.pathname,
+          renderedPath,
+          `fallback said "${url.pathname}" but the renderer routed "${renderedPath}"`,
+        );
+      });
+    }
 
     it('leaves a non-arch path alone', async () => {
       const url = await probeMode('raw-fallback', '/admin/settings?x=1');
@@ -334,6 +365,37 @@ describe('requestRoutedUrl (the exported helper consumers must not reimplement)'
       const url = await probeMode('raw-fallback', '/pricing#/events/e1');
       assert.strictEqual(url.pathname, '/pricing');
       assert.strictEqual(url.hash, '');
+    });
+  });
+
+  describe('scheme derivation', function () {
+    // With ROOT_URL pinned to https, a hardcoded 'http' default is
+    // distinguishable from "inherit the app's own scheme". Without this the
+    // suite's own ROOT_URL is http and the two are indistinguishable.
+    const pinned = (target, headerOverrides) => probeMode('root-url-scheme', target, headerOverrides);
+
+    it('pins ROOT_URL for the duration of the probe (fixture sanity)', async () => {
+      const url = await pinned('/');
+      assert.strictEqual(url.pinnedRootUrl, 'https://pinned.test:8443/');
+    });
+
+    it('takes the scheme from ROOT_URL when no x-forwarded-proto is set', async () => {
+      // A TLS terminator that rewrites Host but sets no x-forwarded-proto is a
+      // normal deployment; defaulting to http downgraded every absolute URL.
+      const url = await pinned('/events/e1');
+      assert.strictEqual(url.protocol, 'https:');
+      assert.strictEqual(url.host, `localhost:${PORT}`, 'the real Host header must still win for the authority');
+      assert.strictEqual(url.pathname, '/events/e1');
+    });
+
+    it('lets a valid x-forwarded-proto override the ROOT_URL scheme', async () => {
+      const url = await pinned('/', { 'X-Forwarded-Proto': 'http' });
+      assert.strictEqual(url.protocol, 'http:');
+    });
+
+    it('takes both scheme and host from ROOT_URL when the Host is unusable', async () => {
+      const url = await pinned('/', { Host: '999.999.999.999' });
+      assert.strictEqual(url.origin, 'https://pinned.test:8443');
     });
   });
 

@@ -53,34 +53,32 @@ const headerValue = (headers, name) => {
   return typeof value === 'string' ? value : '';
 };
 
+// The app's own ROOT_URL, which supplies whatever the request headers cannot.
+// It is the origin the app already considers canonical (it is what
+// `Meteor.absoluteUrl()` builds every link and email URL from), it is
+// operator-configured rather than client-supplied, and it is guaranteed to be a
+// real origin for this app. `http://localhost` is the last resort, for an unset
+// or unparseable ROOT_URL.
+const rootUrl = () => {
+  try {
+    return new URL(Meteor.absoluteUrl());
+  } catch (error) {
+    return new URL('http://localhost');
+  }
+};
+
 // Where a missing or unusable `Host` header lands.
 //
-// The app's own ROOT_URL is the right answer: it is the origin the app already
-// considers canonical (it is what `Meteor.absoluteUrl()` builds every link and
-// email URL from), it is operator-configured rather than client-supplied, and
-// it is guaranteed to be a real origin for this app. Its *scheme* is used too,
-// so the fallback is a coherent origin rather than a mix of ROOT_URL's host and
-// a header's scheme — but an explicitly supplied, valid `x-forwarded-proto`
-// still wins, because a proxy knows which scheme the client actually used.
-//
-// `http://localhost` is the last resort, for an unset or unparseable ROOT_URL.
 // Unlike the previous behaviour (`http://undefined/…`, or a hard `TypeError:
-// Invalid URL` that 500'd the request) it always yields a valid URL, and since
-// only the pathname and search reach React Router, the choice of fallback
+// Invalid URL` that 500'd the request) this always yields a valid URL, and
+// since only the pathname and search reach React Router, the choice of fallback
 // origin cannot change which route matches.
 const fallbackOrigin = (scheme) => {
-  let rootUrl;
+  const root = rootUrl();
   try {
-    rootUrl = new URL(Meteor.absoluteUrl());
+    return new URL(`${scheme}://${root.host}`);
   } catch (error) {
-    rootUrl = new URL('http://localhost');
-  }
-
-  const protocol = scheme || rootUrl.protocol.replace(/:$/, '') || 'http';
-  try {
-    return new URL(`${protocol}://${rootUrl.host}`);
-  } catch (error) {
-    return new URL(`${protocol}://localhost`);
+    return new URL(`${scheme}://localhost`);
   }
 };
 
@@ -96,8 +94,17 @@ const requestOrigin = (headers) => {
   // Only 'http' and 'https' are accepted. They are the only schemes a request
   // can physically arrive over, the scheme has no effect on routing, and
   // admitting anything else just widens what a header can put in a URL.
+  //
+  // With no usable header, the scheme comes from ROOT_URL rather than a
+  // hardcoded 'http'. A TLS terminator that rewrites Host but sets no
+  // `x-forwarded-proto` is a normal deployment, and defaulting to 'http' there
+  // handed every loader an `http://` URL for an https site — downgrading any
+  // absolute redirect built from `request.url` and emitting plaintext canonical
+  // and og:url tags.
   const forwarded = headerValue(headers, 'x-forwarded-proto').split(',')[0].trim().toLowerCase();
-  const scheme = (forwarded === 'http' || forwarded === 'https') ? forwarded : '';
+  const scheme = (forwarded === 'http' || forwarded === 'https')
+    ? forwarded
+    : (rootUrl().protocol.replace(/:$/, '') || 'http');
 
   const rawHost = headerValue(headers, 'host').trim();
   if (!HOST_RE.test(rawHost)) {
@@ -105,7 +112,7 @@ const requestOrigin = (headers) => {
   }
 
   try {
-    return new URL(`${scheme || 'http'}://${rawHost}`);
+    return new URL(`${scheme}://${rawHost}`);
   } catch (error) {
     // HOST_RE is a syntactic filter, not a parser: it accepts authorities the
     // URL parser rejects (`999.999.999.999`, `host:99999`, `[1.2.3.4]`, …).
@@ -148,13 +155,16 @@ const requestSearch = (req) => {
 
 // Strip a leading `/__<arch>` segment exactly as webapp's `categorizeRequest`
 // does, for the fallback path where we could not call webapp itself. Mirrors
-// webapp's logic including the `clientPrograms` membership test (so `/__cordova`
-// is only stripped when a cordova program is actually built), but guards the
-// undefined-segment case that makes webapp's own version throw.
+// webapp's logic including the `clientPrograms` membership test, so `/__cordova`
+// is only stripped when a cordova program is actually built.
+//
+// Callers must pass a `normalizePathname()` result — it always starts with `/`,
+// so `split('/')[1]` is always a string — and must pass it BEFORE dot segments
+// are removed. See `uncategorizedPathname`.
 const stripArchSegment = (pathname) => {
   const parts = pathname.split('/');
   const archKey = parts[1];
-  if (typeof archKey !== 'string' || !archKey.startsWith('__')) {
+  if (!archKey.startsWith('__')) {
     return pathname;
   }
 
@@ -203,21 +213,36 @@ const categorize = (req) => {
   return { request: req, categorized: false };
 };
 
+// The pathname of a raw request target, WITHOUT removing dot segments.
+//
+// `new URL()` cannot be used for this. It removes dot segments immediately,
+// and that has to happen *after* the arch segment is stripped: webapp strips
+// `/__<arch>` from the raw pathname `parseurl` returns, and dot-segment removal
+// only happens later, when the value is assigned to `url.pathname`. Normalizing
+// first inverts that order and produces a different answer from the renderer —
+// `/x/../__browser/pricing` would strip to `/pricing` where the renderer routes
+// `/__browser/pricing`.
+const rawTargetPathname = (target) => {
+  // Absolute-form request targets (`GET http://host/path HTTP/1.1`) are legal
+  // for proxies; `parseurl`, and therefore webapp, reports only the path part.
+  const origin = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*/i.exec(target);
+  const rest = origin ? target.slice(origin[0].length) : target;
+  const cut = rest.search(/[?#]/);
+  return cut === -1 ? rest : rest.slice(0, cut);
+};
+
 // Pathname for a request webapp did not categorize for us.
 //
 // This must NOT fall through to `requestPathname`, whose first check is
 // `req.path` — express's un-arch-stripped getter. Degrading to that would make
 // the helper report `/__browser/admin` where the renderer routes `/admin`: it
 // would fail open into exactly the drift this export exists to prevent. Derive
-// from the raw target and strip the arch segment ourselves instead.
+// from the raw target and strip the arch segment ourselves instead, in webapp's
+// order: strip first, then let the `url.pathname` setter remove dot segments.
 const uncategorizedPathname = (req) => {
   let pathname;
   if (typeof req.url === 'string') {
-    try {
-      pathname = new URL(req.url, 'http://localhost').pathname;
-    } catch (error) {
-      pathname = '/';
-    }
+    pathname = rawTargetPathname(req.url);
   } else if (req.url && typeof req.url.pathname === 'string') {
     pathname = req.url.pathname;
   } else {
@@ -248,8 +273,9 @@ export const requestRoutedUrl = (req) => {
   const url = requestOrigin(headers);
   // Assignment, not concatenation: these setters are origin-safe by
   // construction and percent-encode anything that would otherwise re-parse.
+  // The pathname setter is also what removes dot segments, which is why both
+  // pathname sources above hand it a raw, un-normalized path.
   url.pathname = categorized ? requestPathname(request) : uncategorizedPathname(request);
   url.search = requestSearch(request);
-  url.hash = '';
   return url;
 };

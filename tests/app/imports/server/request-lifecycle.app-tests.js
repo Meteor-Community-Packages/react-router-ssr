@@ -40,6 +40,14 @@ describe('declined requests always get a response', function () {
         null,
         `${target} should not be served the app document`,
       );
+      // Promised in the changelog: a declined URL is not a real resource, so no
+      // proxy or CDN should remember it.
+      assert.strictEqual(
+        res.headers['cache-control'],
+        'no-store',
+        `${target} should be uncacheable, got ${res.headers['cache-control']}`,
+      );
+      assert.match(res.headers['content-type'] || '', /text\/plain/);
     });
   }
 

@@ -118,9 +118,24 @@ It accepts both request shapes:
   leading `/__<arch>` segment);
 - an **already-categorized** webapp request, as passed to boilerplate data callbacks.
 
+#### What each part of the returned URL is worth
+
+| part | trust | |
+| --- | --- | --- |
+| `pathname` | trustworthy | may legitimately begin with `//` — see below |
+| `search` | trustworthy but **normalized** | a re-serialization, not raw bytes — see below |
+| `origin`, `host`, `protocol`, `href` | **not trustworthy** | derived from client headers — see below |
+
+**`search` is a re-serialization, not the request's query string.** It is rebuilt from the
+query object webapp parsed, so `?a=b%20c&flag` comes back as `?a=b+c&flag=`. Repeated keys are
+lossy, in a webapp-version-dependent way: `?a=1&a=2` becomes `?a=2` on webapp 2.2.0 (which
+builds the object with `Object.fromEntries`) but `?a=1%2C2` on 2.1.2 (which comma-joins). That
+is faithful to what the renderer routes on — which is the whole point of this helper — but
+**never recompute a signature or HMAC over it**; read `req.url` if you need the raw bytes.
+
 #### Security: the origin is client-supplied, by design
 
-**`pathname` and `search` are trustworthy. `origin`, `host` and `href` are not.**
+**`pathname` is trustworthy. `origin`, `host` and `href` are not.**
 
 This package deliberately derives the origin from the request's `Host` and `X-Forwarded-Proto`
 headers, because host-routed multi-tenant apps have to be able to see which host was asked
@@ -147,6 +162,29 @@ gives `requestRoutedUrl(req).origin === "http://evil.example"`, and the same val
 
 If your app is not host-routed, the simplest rule is to ignore the origin entirely and build
 absolute URLs from `Meteor.absoluteUrl()`.
+
+Two more things worth knowing when you assess exposure:
+
+- **`X-Forwarded-Host` is not consulted, anywhere.** The origin comes from `Host` only.
+  Honouring `X-Forwarded-Host` would hand a second, even less constrained header control of
+  the origin, so it is deliberately ignored — but that means host passthrough only works if
+  your proxy *rewrites* `Host`. Behind a proxy that keeps its own `Host` and forwards the
+  original in `X-Forwarded-Host`, your app sees the proxy's internal authority, silently. If
+  you need that value, read the header yourself and check it against your own allow-list.
+- **The scheme** comes from `X-Forwarded-Proto` when it is `http` or `https`, and otherwise
+  from your app's `ROOT_URL` — not from a hardcoded `http`. An https app behind a terminator
+  that sets no `X-Forwarded-Proto` therefore still gets `https://` URLs.
+
+#### Where the origin comes from, exactly
+
+1. **Scheme** — the first comma-separated hop of `X-Forwarded-Proto` if it is exactly `http`
+   or `https`; otherwise `ROOT_URL`'s scheme; otherwise `http`.
+2. **Host** — the `Host` header, if it is a plausible authority (registered name or bracketed
+   IPv6 literal, optional port, and none of `/ \ # ? @`, whitespace or control characters)
+   *and* `new URL()` accepts it. Otherwise `ROOT_URL`'s host, and finally `localhost`.
+
+The path and query are then applied with the `URL` object's `pathname`/`search` setters, never
+by string concatenation, so no part of the path can reach the authority.
 
 #### Why you should not reimplement this
 
@@ -286,19 +324,37 @@ TEST_CLIENT=0 TEST_SERVER=1 meteor test --full-app --once \
   --port 3737 --driver-package meteortesting:mocha
 ```
 
-Every test drives a real socket → real webapp → real `renderWithSSR` → real React Router, and
-asserts on the route that actually matched, because the bugs these cover are invisible to a
-unit test of an exported function. Hostile requests are written as raw bytes, since `fetch` and
+Every test starts from a real socket, because the bugs they cover are invisible to a unit test
+of an exported function. Hostile requests are written as raw bytes, since `fetch` and
 `http.request` both refuse to send a `Host` header containing `/`.
 
-> **Note:** a Meteor boot failure prints `0 passing` with no failures, which reads as green.
-> Always check the *count* — as of 7.1.0 the suite is **66 passing**.
+Most tests then go all the way through webapp → `renderWithSSR` → React Router and assert on
+the route that actually matched. The `requestRoutedUrl` tests are different: they call the
+export from `WebApp.handlers` middleware — the way a consumer does — and terminate there
+without reaching the renderer. A dedicated cross-check drives both paths for the same targets
+and asserts they agree on pathname, search, origin and href, which is what makes the middleware
+tests meaningful.
 
-**What the suite does not cover.** `TEST_CLIENT=0` is hard-coded in the script, so *nothing on
-the client is tested* — hydration, `hydrateRoot(document, …)`, client-side navigation and the
-`useSubscribeSuspense` client path are all unexercised, and running with `TEST_CLIENT=1` would
-need a browser driver package that is not installed. Server rendering, request handling and URL
-derivation are covered; hydration is not.
+> **Note:** a Meteor boot failure prints `0 passing` with no failures, which reads as green.
+> Always check the *count* — as of 7.1.0 the suite is **73 passing**.
+
+### What the suite does not cover
+
+- **Nothing on the client.** `TEST_CLIENT=0` is hard-coded in the script, so hydration,
+  `hydrateRoot(document, …)`, client-side navigation and the `useSubscribeSuspense` client path
+  are all unexercised; `TEST_CLIENT=1` would need a browser driver package that is not
+  installed. Server rendering, request handling and URL derivation are covered; hydration is
+  not.
+- **Only recent Meteor releases.** The suite is run on **Meteor 3.5** (webapp 2.2.0) and
+  **Meteor 3.4.1** (webapp 2.1.2) — 73 passing on both, which is what gives the
+  webapp-version-dependent query behaviour described above real coverage.
+
+  ⚠️ **`package.js` declares `api.versionsFrom('METEOR@3.0.1')`, and that floor does not
+  work.** On METEOR@3.0.1 (webapp 2.0.4) `renderWithSSR` renders no app markup at all: the
+  suite reports 23 passing / 50 failing on 7.1.0, and 5 passing / 68 failing on 7.0.1, so this
+  predates 7.1.0 rather than being caused by it. The true minimum lies somewhere above 3.0.1
+  and at or below 3.4.1; it has not been pinned down, because the intermediate releases could
+  not be built in this environment. Treat 3.4.1 as the lowest *verified* release.
 
 `meteor test` and a running dev server cannot share the app directory, so stop one before
 starting the other.

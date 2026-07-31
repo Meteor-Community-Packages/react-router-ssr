@@ -39,12 +39,22 @@ onward is affected by the security issue below; all of them should upgrade.**
 
   **Affected versions: every published release from 5.0.0 through 7.0.1**, i.e. `5.0.0`,
   `6.0.0-beta.1`, `6.0.0-beta.2`, `6.0.0`, `7.0.0` and `7.0.1`. The header-derived base URL
-  arrived in 5.0.0 with the switch to React Router 6 data routers; 5.x and 6.x spell it
-  `${protocol ? \`${protocol}:\` : ''}//${host}`, which is exploitable through
-  `X-Forwarded-Proto` exactly as shown above (on 5.x and 6.x a path in `Host` alone yields an
-  unparseable URL and a 500 rather than a redirect of the route). **1.x–4.x are not affected**:
-  they passed the request path straight to `StaticRouter` and never derived an origin from
-  request headers.
+  arrived in 5.0.0 with the switch to React Router 6 data routers. There are two spellings of
+  it, and **the exposure differs between them — check which one you are on**:
+
+  | versions | base URL expression | `X-Forwarded-Proto` steers? | `Host` **alone** steers? |
+  | --- | --- | --- | --- |
+  | `5.0.0`, `6.0.0-beta.1`, `6.0.0-beta.2` | `${protocol ? '${protocol}:' : ''}//${host}` | **yes** | no — a path in `Host` yields an unparseable URL and a 500 |
+  | `6.0.0`, `7.0.0`, `7.0.1` | `${protocol}://${host}` | **yes** | **yes** |
+
+  Note especially that **`6.0.0` — the current published 6.x — behaves like 7.0.x, not like the
+  6.0.0 betas.** It already carries the `${protocol}://${host}` form with the `'http'` default.
+  So on `6.0.0`, `7.0.0` and `7.0.1`, `Host: app.example.com/pricing#` steers the route on its
+  own, with no `X-Forwarded-Proto` involved. **If your edge strips or normalises
+  `X-Forwarded-Proto`, that is not a mitigation on those versions.**
+
+  **1.x–4.x are not affected**: they passed the request path straight to `StaticRouter` and
+  never derived an origin from request headers.
 
   Fixed in two independent ways, either of which stops the routing attack on its own:
 
@@ -85,8 +95,26 @@ onward is affected by the security issue below; all of them should upgrade.**
     `pathname === "//evil.example/x"`. Redirecting to a bare `url.pathname` therefore gives a
     protocol-relative open redirect. (The renderer and `requestRoutedUrl` agree on this
     value, so it is not drift — but it is a sharp edge.)
+  - **`X-Forwarded-Host` is not consulted, anywhere.** The origin comes from `Host` only.
+    That is the deliberate security choice — honouring `X-Forwarded-Host` would hand a second,
+    even less constrained header control of the origin — but it means host passthrough only
+    works if your proxy *rewrites* `Host`. Behind a proxy that preserves its own `Host` and
+    forwards the original in `X-Forwarded-Host`, the app silently sees the proxy's internal
+    authority instead of the requested one. If you need that value, read the header yourself,
+    against your own allow-list.
+  - **`search` is a normalized re-serialization, not the raw query bytes.** It is rebuilt from
+    the query object webapp parsed, so `?a=b%20c&flag` comes back as `?a=b+c&flag=`. Repeated
+    keys are lossy in a webapp-version-dependent way: `?a=1&a=2` becomes `?a=2` on webapp
+    2.2.0 (which uses `Object.fromEntries`) but `?a=1%2C2` on 2.1.2 (which comma-joins).
+    Never recompute a signature or HMAC over this value — read `req.url` for raw bytes.
+  - **`isAppUrl()`'s decline rules are matched against the encoded pathname.** `/__cordova/x`
+    is declined but `/%5F%5Fcordova/x` is not; it renders the app's catch-all route instead.
+    That direction only ever serves the catch-all for a URL that does not exist, and it
+    matches how webapp's own `appUrl()` behaves, so it is left as is — but if you rely on
+    `RoutePolicy.declare()` to keep app HTML off a prefix, know that the check is syntactic.
 
-  Treat `pathname` and `search` as the trustworthy outputs, and the origin as untrusted.
+  Treat `pathname` as the trustworthy output, `search` as trustworthy-but-normalized, and the
+  origin as untrusted.
 
 ### Fixed
 
@@ -131,16 +159,20 @@ onward is affected by the security issue below; all of them should upgrade.**
 - **The published isopack no longer contains the repo's `node_modules` or test app.** Meteor's
   package source walk (unlike an app's) excludes neither, and adds every file it finds as a
   lazy module: built from a working tree with dev dependencies installed, the isopack was
-  ~150 MB / 167 source resources instead of ~500 K / 7. Only the `rimraf ./node_modules` in
-  the `publish-release` npm script had been keeping that out of releases. A `.meteorignore`
-  now excludes both, so the result no longer depends on remembering to run one script.
+  ~148 MB / 167 source resources instead of ~504 K / 7. Previously the only thing keeping that
+  out of a release was the `rimraf ./node_modules` in the `publish-release` npm script. A
+  `.meteorignore` now excludes both, so a correct result no longer depends on remembering to
+  publish through that one script — `rimraf` stays as a second line of defence on an
+  irreversible action.
 
 ### Misc
 
 - The package now has a test suite: a small Meteor app under `tests/app/` that drives real
-  HTTP requests (written as raw bytes onto a socket, so hostile `Host` headers survive) all
-  the way through webapp, `renderWithSSR` and React Router, and asserts on the route that
-  actually matched. See [Running the tests](README.md#running-the-tests).
+  HTTP requests, written as raw bytes onto a socket so that hostile `Host` headers survive.
+  Most of them go through webapp, `renderWithSSR` and React Router and assert on the route
+  that actually matched; the `requestRoutedUrl` tests instead call the export from
+  `WebApp.handlers` middleware, as a consumer would, and a cross-check asserts the two agree.
+  See [Running the tests](README.md#running-the-tests) for what is and is not covered.
 - `webapp` and `routepolicy` are now declared explicitly in `package.js` instead of being
   relied on transitively.
 
