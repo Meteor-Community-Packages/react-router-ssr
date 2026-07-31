@@ -33,12 +33,18 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
   WebAppInternals.disableBoilerplateResponse();
 
   FastRender.onPageLoadWithoutSink(async (request, data, arch, response) => {
-    if (!isAppUrl(request)) {
+    // Derive the routed URL ONCE, and decide whether to render from the very
+    // string React Router will route on. Deciding from the raw request path
+    // instead let a dot segment (`/x/../sockjs/info`, `/x/../__cordova/y`)
+    // walk straight past this check and then route as the normalized path.
+    const routedUrl = requestRoutedUrl(request);
+
+    if (!isAppUrl(routedUrl.pathname)) {
       endDeclinedRequest(response);
       return;
     }
 
-    const fetchRequest = createFetchRequest(request);
+    const fetchRequest = createFetchRequest(request, routedUrl);
     const context = await handler.query(fetchRequest);
 
     const router = createStaticRouter(
@@ -178,6 +184,8 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
   });
 };
 
+const DECLINED_BODY = 'Not Found';
+
 // Answer a request the renderer has declined.
 //
 // By the time a boilerplate data callback runs, webapp has already committed to
@@ -191,8 +199,6 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
 // webapp still calls `res.writeHead()` after the data callbacks return;
 // fast-render guards that call once the response has been sent, so ending here
 // is safe.
-const DECLINED_BODY = 'Not Found';
-
 function endDeclinedRequest (response) {
   if (!response || response.writableEnded) {
     return;
@@ -209,7 +215,11 @@ function endDeclinedRequest (response) {
   response.end(DECLINED_BODY);
 }
 
-function createFetchRequest (request) {
+// `routedUrl` is the URL React Router routes on, produced by the exported
+// `requestRoutedUrl` helper — the same function consumers call from their own
+// middleware, so there is exactly one implementation. It is passed in rather
+// than recomputed here because the decision to render was already made from it.
+function createFetchRequest (request, routedUrl) {
   const sinkHeaders = request.headers;
 
   const headers = new Headers();
@@ -234,12 +244,7 @@ function createFetchRequest (request) {
     signal: controller.signal,
   };
 
-  // The URL React Router routes on. Derived by the exported `requestRoutedUrl`
-  // helper so that there is exactly one implementation of this — the same one
-  // consumers call from their own middleware. It validates the header-derived
-  // origin and composes the path via URL setters rather than string
-  // concatenation; see request-url.js for why both halves of that matter.
-  return new Request(requestRoutedUrl(request), init);
+  return new Request(routedUrl, init);
 };
 
 export { renderWithSSR };

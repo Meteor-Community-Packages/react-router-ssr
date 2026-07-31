@@ -10,13 +10,16 @@ import net from 'net';
 // HTTP server the tests talk to directly, and ROOT_URL points at the proxy.
 export const appPort = () => Number(process.env.PORT) || 3737;
 
-// The host the package falls back to when the client's Host header is missing
-// or unusable — the app's own ROOT_URL host, exactly as the fix derives it.
-export const rootUrlHost = () => {
+// The origin the package falls back to when the client's Host header is missing
+// or unusable — the app's own ROOT_URL origin, exactly as the fix derives it.
+// Note this is NOT the request's own authority (the tests connect straight to
+// PORT while ROOT_URL points at the proxy), so an assertion on it cannot be
+// satisfied by the attacker-supplied value.
+export const rootUrlOrigin = () => {
   try {
-    return new URL(process.env.ROOT_URL).host || 'localhost';
+    return new URL(process.env.ROOT_URL).origin;
   } catch {
-    return 'localhost';
+    return 'http://localhost';
   }
 };
 

@@ -109,15 +109,67 @@ describe('regression controls: machinery other than the renderer must keep worki
     assert.ok(res.body.includes('websocket'), `sockjs /info body was ${JSON.stringify(res.body.slice(0, 200))}`);
   });
 
-  it('serves the DDP runtime config script', async () => {
-    const res = await request('/meteor_runtime_config.js');
-    assert.notStrictEqual(res.status, undefined);
-    assert.ok(res.complete);
+  it('serves the client bundle the rendered document points at', async () => {
+    // Replaces an earlier test of /meteor_runtime_config.js that asserted
+    // nothing and was misnamed — Meteor 3.5 inlines the runtime config, so that
+    // URL is just an unknown app path and returned the catch-all HTML document.
+    // Take a script URL out of the document we actually rendered and fetch it:
+    // that proves the manifest's static assets are still served.
+    const page = await request('/');
+    const scripts = [...page.body.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => m[1]);
+    assert.ok(scripts.length > 0, `the rendered document contained no <script src>: ${page.body.slice(0, 400)}`);
+
+    const bundleUrl = scripts[scripts.length - 1].replace(/&amp;/g, '&');
+    const res = await request(bundleUrl);
+    assert.strictEqual(res.status, 200, `${bundleUrl} returned ${res.status}`);
+    assert.match(
+      res.headers['content-type'] || '',
+      /javascript/,
+      `${bundleUrl} served as ${res.headers['content-type']}`,
+    );
   });
 
   it('still renders unknown app paths through the catch-all route', async () => {
     const res = await request('/no/such/page');
     assert.strictEqual(res.status, 200);
     assert.strictEqual(routeOf(res), 'NOT-FOUND');
+  });
+});
+
+describe('the decline check and the router must agree on the path', function () {
+  this.timeout(20000);
+
+  // `isAppUrl()` used to decide from the raw request path while React Router
+  // routed the normalized one, so a single dot segment walked past every
+  // decline: `/x/../sockjs/info` was served as app HTML with
+  // location.pathname === "/sockjs/info".
+  const bypasses = [
+    ['dot-dot before a RoutePolicy network route', '/x/../sockjs/info', '/sockjs/info'],
+    ['single dot before a RoutePolicy network route', '/./sockjs/info', '/sockjs/info'],
+    ['dot-dot before the cordova prefix', '/x/../__cordova/y', '/__cordova/y'],
+    ['dot-dot before app.manifest', '/x/../app.manifest', '/app.manifest'],
+    ['dot-dot before favicon.ico', '/x/../favicon.ico', '/favicon.ico'],
+  ];
+
+  for (const [label, target, normalized] of bypasses) {
+    it(`declines ${target} (${label})`, async () => {
+      const res = await request(target);
+      assert.ok(res.complete, `${target} produced no complete response`);
+      assert.strictEqual(
+        marker(res.body, 'matched-route'),
+        null,
+        `${target} was served the app document; the router would route it as ${normalized}`,
+      );
+      assert.strictEqual(res.status, 404, `${target} should be a 404, got ${res.status}`);
+    });
+  }
+
+  it('a dot segment in front of an ordinary route still renders it (control)', async () => {
+    // The decline must come from normalization agreeing with the router, not
+    // from dot segments being rejected wholesale.
+    const res = await request('/x/../pricing');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(routeOf(res), 'DECOY-PRICING');
+    assert.strictEqual(marker(res.body, 'routed-pathname'), '/pricing');
   });
 });

@@ -23,10 +23,12 @@ Package.onUse(function _ (api) {
     'tmeasday:check-npm-versions@2.0.0',
   ]);
 
-  // Used by the server half only (request categorization and route policy).
-  // Both were previously relied on transitively; declared explicitly now that
-  // request-url.js depends on webapp directly.
-  api.use(['webapp', 'routepolicy'], 'server');
+  // Imported by helpers.js / request-url.js, which are server-side concerns —
+  // but Meteor adds every file in a package directory to *every* unibuild as a
+  // lazy module, so those files ship in the client unibuild too. Declared
+  // unqualified so the dependency declaration matches the files actually
+  // shipped. (Both were previously relied on transitively.)
+  api.use(['webapp', 'routepolicy']);
 
   api.mainModule('client.jsx', 'client');
   api.mainModule('server.jsx', 'server');

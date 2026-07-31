@@ -90,17 +90,19 @@ request. See [below](#requestroutedurlreq).
 ### `requestRoutedUrl(req)`
 
 Returns the WHATWG [`URL`](https://developer.mozilla.org/en-US/docs/Web/API/URL) that this
-package hands to React Router for `req`. Server only. Never throws.
+package hands to React Router for `req`. Server only. Does not throw for any input.
 
 ```js
 import { WebApp } from "meteor/webapp";
 import { requestRoutedUrl } from "meteor/communitypackages:react-router-ssr";
 
 WebApp.handlers.use((req, res, next) => {
-  const url = requestRoutedUrl(req);        // e.g. https://app.example.com/events/abc?tab=schedule
+  // pathname/search come from the request target and are trustworthy.
+  // The ORIGIN comes from the client's Host header and is NOT — see below.
+  const url = requestRoutedUrl(req);
 
   if (url.pathname.startsWith("/admin") && !isAdmin(req)) {
-    res.writeHead(302, { Location: "/login" });
+    res.writeHead(302, { Location: "/login" });   // a path, not url.origin + …
     res.end();
     return;
   }
@@ -115,6 +117,36 @@ It accepts both request shapes:
   yet, so the helper reproduces categorization itself (dropping the `#fragment` and stripping a
   leading `/__<arch>` segment);
 - an **already-categorized** webapp request, as passed to boilerplate data callbacks.
+
+#### Security: the origin is client-supplied, by design
+
+**`pathname` and `search` are trustworthy. `origin`, `host` and `href` are not.**
+
+This package deliberately derives the origin from the request's `Host` and `X-Forwarded-Proto`
+headers, because host-routed multi-tenant apps have to be able to see which host was asked
+for. Since 7.1.0 those headers can no longer inject a *path* (see the
+[changelog](CHANGELOG.md#710)), but a syntactically valid host is still taken at face value:
+
+```http
+GET /events/e1 HTTP/1.1
+Host: evil.example
+```
+
+gives `requestRoutedUrl(req).origin === "http://evil.example"`, and the same value reaches
+`request.url` inside your React Router loaders and actions. Treat it as attacker input:
+
+- **Do not redirect to an absolute URL built from it.** React Router's common idiom
+  `redirect(new URL("/login", request.url))` becomes an open redirect to the attacker's host.
+  Redirect to a path — `redirect("/login")` — or pin the origin explicitly with
+  `new URL("/login", Meteor.absoluteUrl())`, or check the host against an allow-list first.
+- **The same applies** to canonical `<link>` tags, `og:url`, absolute asset URLs, signed
+  callback URLs and anything else derived from the origin.
+- **`pathname` can begin with `//`.** `GET //evil.example/x` legitimately routes with
+  `pathname === "//evil.example/x"`, so redirecting to a bare `url.pathname` yields a
+  protocol-relative open redirect. Prefix-check or normalise before using it as a `Location`.
+
+If your app is not host-routed, the simplest rule is to ignore the origin entirely and build
+absolute URLs from `Meteor.absoluteUrl()`.
 
 #### Why you should not reimplement this
 
@@ -260,7 +292,13 @@ unit test of an exported function. Hostile requests are written as raw bytes, si
 `http.request` both refuse to send a `Host` header containing `/`.
 
 > **Note:** a Meteor boot failure prints `0 passing` with no failures, which reads as green.
-> Always check the *count* — as of 7.1.0 the suite is **45 passing**.
+> Always check the *count* — as of 7.1.0 the suite is **66 passing**.
+
+**What the suite does not cover.** `TEST_CLIENT=0` is hard-coded in the script, so *nothing on
+the client is tested* — hydration, `hydrateRoot(document, …)`, client-side navigation and the
+`useSubscribeSuspense` client path are all unexercised, and running with `TEST_CLIENT=1` would
+need a browser driver package that is not installed. Server rendering, request handling and URL
+derivation are covered; hydration is not.
 
 `meteor test` and a running dev server cannot share the app directory, so stop one before
 starting the other.

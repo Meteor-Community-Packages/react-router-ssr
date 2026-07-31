@@ -2,14 +2,14 @@
 
 ## 7.1.0
 
-A security fix, a denial-of-service fix, and one new export. **All 7.0.x users should
-upgrade.**
+A security fix, a denial-of-service fix, and one new export. **Every release from 5.0.0
+onward is affected by the security issue below; all of them should upgrade.**
 
 ### Security
 
-- **Any client could choose which route the server rendered, on every route, in every app
-  using 7.0.x (and 6.x).** The URL handed to React Router was built by string-concatenating
-  request headers:
+- **Any client could choose which route the server rendered, on every route, in every
+  affected app.** The URL handed to React Router was built by string-concatenating request
+  headers:
 
   ```js
   `${headers['x-forwarded-proto']}://${headers.host}${pathname}${search}`
@@ -32,21 +32,61 @@ upgrade.**
   **What they get:** the pathname the server-side router matches — for *any* request target,
   including authenticated and tokenised URLs. The server-rendered document, its status code,
   and anything a route loader derives from `request.url` all come from the injected path.
-  **Who is affected:** every route of every app on 7.0.x or 6.x. A reverse proxy is **not** a
-  mitigation: `x-forwarded-proto` was read as the *first* comma-separated hop, which under the
-  usual appending-proxy configuration is the value the client supplied. If a cache sits in
-  front of the app, this is also a cache-poisoning primitive.
+  A reverse proxy is **not** a mitigation: `x-forwarded-proto` was read as the *first*
+  comma-separated hop, which under the usual appending-proxy configuration is the value the
+  client supplied. If a cache sits in front of the app, this is also a cache-poisoning
+  primitive.
+
+  **Affected versions: every published release from 5.0.0 through 7.0.1**, i.e. `5.0.0`,
+  `6.0.0-beta.1`, `6.0.0-beta.2`, `6.0.0`, `7.0.0` and `7.0.1`. The header-derived base URL
+  arrived in 5.0.0 with the switch to React Router 6 data routers; 5.x and 6.x spell it
+  `${protocol ? \`${protocol}:\` : ''}//${host}`, which is exploitable through
+  `X-Forwarded-Proto` exactly as shown above (on 5.x and 6.x a path in `Host` alone yields an
+  unparseable URL and a 500 rather than a redirect of the route). **1.x–4.x are not affected**:
+  they passed the request path straight to `StaticRouter` and never derived an origin from
+  request headers.
 
   Fixed in two independent ways, either of which stops the routing attack on its own:
 
   1. The scheme and authority derived from headers are now validated. The scheme must be
      `http` or `https`; the host must be a plausible authority (registered name or bracketed
      IPv6 literal, optional port) containing none of `/`, `\`, `#`, `?`, `@`, whitespace or
-     control characters. An unusable `Host` falls back to the app's own `ROOT_URL` host
-     (`Meteor.absoluteUrl()`), and finally to `localhost`.
+     control characters. An unusable `Host` — whether it fails that filter or is merely
+     something `new URL()` rejects, such as `999.999.999.999` or `host:99999` — falls back to
+     the app's own `ROOT_URL` origin (`Meteor.absoluteUrl()`), and finally to
+     `http://localhost`. A valid `x-forwarded-proto` still overrides the fallback's scheme.
   2. The URL is no longer assembled by concatenation. The validated origin is parsed first and
      the path and query are applied with the `URL` object's `pathname`/`search` setters, which
      cannot reach the origin and percent-encode anything that would otherwise re-parse.
+
+- **What this fix does NOT do — read this if you build absolute URLs.** Validation makes the
+  origin *well-formed*, not *trustworthy*. A syntactically valid but foreign `Host` is still
+  accepted verbatim and becomes the origin of the URL the renderer routes on:
+
+  ```http
+  GET /events/e1 HTTP/1.1
+  Host: evil.example
+  ```
+
+  still yields `request.url === "http://evil.example/events/e1"` inside your route loaders,
+  and the same from `requestRoutedUrl(req).origin`. This is **by design** — host-routed
+  multi-tenant apps must be able to see the requested host, and pinning the origin to
+  `ROOT_URL` would break them — but it means the origin is attacker-controlled input.
+
+  Consequences to guard against in your own code:
+
+  - React Router's usual idiom `redirect(new URL("/login", request.url))` produces an
+    absolute redirect to the attacker's host. Redirect to a path (`redirect("/login")`), or
+    pin the origin yourself (`new URL("/login", Meteor.absoluteUrl())`), or allow-list the
+    host before trusting it.
+  - The same applies to canonical `<link>` tags, `og:url`, absolute asset URLs and anything
+    else you derive from `request.url` or `requestRoutedUrl(req).origin`.
+  - `pathname` can legitimately begin with `//`: `GET //evil.example/x` routes with
+    `pathname === "//evil.example/x"`. Redirecting to a bare `url.pathname` therefore gives a
+    protocol-relative open redirect. (The renderer and `requestRoutedUrl` agree on this
+    value, so it is not drift — but it is a sharp edge.)
+
+  Treat `pathname` and `search` as the trustworthy outputs, and the origin as untrusted.
 
 ### Fixed
 
@@ -64,6 +104,13 @@ upgrade.**
   the `/__browser` segment and leaves an *empty* pathname, and `RoutePolicy.classify('')`
   throws `url must be a relative URL:`. An empty or non-absolute pathname is now normalised to
   `/`, so the URL renders the root route like `/__browser/` always did.
+- **A dot segment defeated every "don't serve app HTML here" rule.** `isAppUrl()` decided from
+  the raw request path while React Router routed the *normalized* one, so `/x/../sockjs/info`
+  and `/./sockjs/info` were served the app document with `location.pathname` of
+  `/sockjs/info`, and `/x/../__cordova/y` likewise. Any route an operator had declared with
+  `RoutePolicy` — `/sockjs/`, or an app's own `/internal-api/` — could be dressed up this way
+  and answered with app HTML. Both decisions are now made from the single pathname
+  `requestRoutedUrl` produces. (Present since at least 6.0.0; not introduced by this release.)
 
 ### Added
 
@@ -76,7 +123,17 @@ upgrade.**
 
   This exists because consumer middleware that needs the routed path *before* the renderer
   runs was hand-mirroring the algorithm, and the copy drifted from the package. See
-  [the README](README.md#requestroutedurlreq) — please do not reimplement it.
+  [the README](README.md#requestroutedurlreq) — please do not reimplement it, and read the
+  security note there before using its `origin`.
+
+### Packaging
+
+- **The published isopack no longer contains the repo's `node_modules` or test app.** Meteor's
+  package source walk (unlike an app's) excludes neither, and adds every file it finds as a
+  lazy module: built from a working tree with dev dependencies installed, the isopack was
+  ~150 MB / 167 source resources instead of ~500 K / 7. Only the `rimraf ./node_modules` in
+  the `publish-release` npm script had been keeping that out of releases. A `.meteorignore`
+  now excludes both, so the result no longer depends on remembering to run one script.
 
 ### Misc
 

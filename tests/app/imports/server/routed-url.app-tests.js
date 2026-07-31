@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { appPort, browserHeaders, marker, rawRequest, rootUrlHost, waitForServer } from './helpers/raw-http';
+import { appPort, browserHeaders, marker, rawRequest, rootUrlOrigin, waitForServer } from './helpers/raw-http';
 
 // Every one of these drives the real path end to end: a real socket → real
 // webapp → real fast-render boilerplate callback → real renderWithSSR → real
@@ -10,7 +10,7 @@ const PORT = appPort();
 const ORIGIN = `http://localhost:${PORT}`;
 // Where a rejected Host header lands. Deliberately *not* the request's own
 // authority, so an assertion on it cannot be satisfied by the attacker's value.
-const FALLBACK_ORIGIN = `http://${rootUrlHost()}`;
+const FALLBACK_ORIGIN = rootUrlOrigin();
 
 const render = (target, headerOverrides) =>
   rawRequest({ target, headers: browserHeaders(headerOverrides) });
@@ -155,10 +155,53 @@ describe('routing (header injection — CVE-shaped: the client must not steer th
     assert.strictEqual(marker(res.body, 'loader-url'), `${ORIGIN}/`);
   });
 
-  it('an invalid Host falls back to the app ROOT_URL host and still renders', async () => {
+  it('a Host the syntax filter rejects falls back to the app ROOT_URL origin', async () => {
     const res = await render('/', { Host: 'not a host/pricing' });
     assert.strictEqual(routeOf(res), 'ROOT');
     assert.strictEqual(marker(res.body, 'loader-url'), `${FALLBACK_ORIGIN}/`);
+  });
+
+  // The syntax filter is deliberately looser than the URL parser, so there are
+  // TWO ways a Host can be unusable. Both must land on the same fallback — this
+  // class used to reach `new URL()`, throw, and silently drop ROOT_URL's port.
+  const urlRejectedHosts = [
+    ['out-of-range dotted quad', '999.999.999.999'],
+    ['bare integer overflowing IPv4', '4294967296'],
+    ['five dotted labels', '1.2.3.4.5'],
+    ['IPv4 in IPv6 brackets', '[1.2.3.4]'],
+    ['port out of range', 'localhost:99999'],
+  ];
+
+  for (const [label, host] of urlRejectedHosts) {
+    it(`a Host the URL parser rejects (${label}) falls back to the full ROOT_URL origin`, async () => {
+      const res = await render('/', { Host: host });
+      assert.strictEqual(routeOf(res), 'ROOT');
+      assert.strictEqual(
+        marker(res.body, 'loader-url'),
+        `${FALLBACK_ORIGIN}/`,
+        `${label}: fallback must keep ROOT_URL's host AND port`,
+      );
+    });
+  }
+
+  it('a syntactically odd but parseable Host is still honoured (the filter is not over-tight)', async () => {
+    // Control for the two tests above: proves they fail because the host is
+    // unusable, not because every unusual host is rejected.
+    const res = await render('/', { Host: '127.0.0.1:8080' });
+    assert.strictEqual(routeOf(res), 'ROOT');
+    assert.strictEqual(marker(res.body, 'loader-url'), 'http://127.0.0.1:8080/');
+  });
+
+  it('a protocol-relative request target stays in the path and never becomes the origin', async () => {
+    // Documented sharp edge (README security note): `//evil.example/x` is a
+    // legitimate pathname, so a consumer redirecting to a bare `url.pathname`
+    // gets a protocol-relative open redirect. What must NOT happen is the host
+    // moving into the origin — assert both halves so the README stays true.
+    const res = await render('//evil.example/x');
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(marker(res.body, 'routed-pathname'), '//evil.example/x');
+    assert.strictEqual(marker(res.body, 'loader-url'), `${ORIGIN}//evil.example/x`);
+    assert.strictEqual(new URL(marker(res.body, 'loader-url')).host, `localhost:${PORT}`);
   });
 
   it('a missing Host header still renders the right route', async () => {
@@ -173,19 +216,33 @@ describe('routing (header injection — CVE-shaped: the client must not steer th
     assert.strictEqual(routeOf(res), 'ROOT');
     assert.strictEqual(marker(res.body, 'loader-url'), `${FALLBACK_ORIGIN}/`);
   });
+
+  it('a valid x-forwarded-proto still wins over the fallback origin scheme', async () => {
+    // Documented rule: an unusable Host falls back to ROOT_URL's *whole*
+    // origin, scheme included, but an explicit proxy-supplied scheme overrides
+    // it — the proxy knows which scheme the client actually used.
+    const res = await render('/', { Host: 'not a host', 'X-Forwarded-Proto': 'https' });
+    assert.strictEqual(routeOf(res), 'ROOT');
+    assert.strictEqual(
+      marker(res.body, 'loader-url'),
+      `${FALLBACK_ORIGIN.replace(/^https?:/, 'https:')}/`,
+    );
+  });
 });
 
 describe('requestRoutedUrl (the exported helper consumers must not reimplement)', function () {
   this.timeout(20000);
 
-  const probe = async (target, headerOverrides) => {
+  const probeMode = async (mode, target, headerOverrides) => {
     const res = await rawRequest({
       target,
-      headers: browserHeaders({ 'x-rrssr-probe': '1', ...headerOverrides }),
+      headers: browserHeaders({ 'x-rrssr-probe': mode, ...headerOverrides }),
     });
     assert.strictEqual(res.status, 200, `probe for ${target} returned ${res.status}`);
     return JSON.parse(res.body);
   };
+
+  const probe = (target, headerOverrides) => probeMode('1', target, headerOverrides);
 
   it('is exported from the server module', async () => {
     const url = await probe('/');
@@ -235,6 +292,68 @@ describe('requestRoutedUrl (the exported helper consumers must not reimplement)'
     assert.strictEqual(injected2.pathname, '/');
   });
 
+  describe('when webapp cannot categorize the request', function () {
+    // The guarded fallback must not degrade into express's un-arch-stripped
+    // `req.path`. If it did, a consumer's `url.pathname.startsWith('/admin')`
+    // gate would see `/__browser/admin` where the renderer routes `/admin` —
+    // failing OPEN, which is exactly the drift the export exists to prevent.
+
+    it('really is exercising the fallback (webapp itself throws on this input)', async () => {
+      const url = await probeMode('raw-fallback', '/__browser/admin');
+      assert.strictEqual(
+        url.webappCategorizeThrew,
+        true,
+        'WebApp.categorizeRequest did not throw — this test is not reaching the fallback branch',
+      );
+    });
+
+    it('strips the /__<arch> segment itself rather than reporting express req.path', async () => {
+      const url = await probeMode('raw-fallback', '/__browser/admin');
+      assert.strictEqual(url.pathname, '/admin');
+    });
+
+    it('leaves a non-arch path alone', async () => {
+      const url = await probeMode('raw-fallback', '/admin/settings?x=1');
+      assert.strictEqual(url.pathname, '/admin/settings');
+      assert.strictEqual(url.search, '?x=1');
+    });
+
+    it('does not strip an arch segment for a program that is not built', async () => {
+      // /__cordova must survive when no mobile platform has been added, exactly
+      // as webapp's own categorization leaves it.
+      const url = await probeMode('raw-fallback', '/__cordova/x');
+      assert.strictEqual(url.pathname, '/__cordova/x');
+    });
+
+    it('normalises a bare arch segment to /', async () => {
+      const url = await probeMode('raw-fallback', '/__browser');
+      assert.strictEqual(url.pathname, '/');
+    });
+
+    it('drops the fragment', async () => {
+      const url = await probeMode('raw-fallback', '/pricing#/events/e1');
+      assert.strictEqual(url.pathname, '/pricing');
+      assert.strictEqual(url.hash, '');
+    });
+  });
+
+  it('does not throw for any input, including null', async () => {
+    const { results } = await probeMode('degenerate', '/');
+    assert.ok(Array.isArray(results) && results.length >= 8, 'expected the degenerate-input sweep to run');
+    const threw = results.filter(r => r.threw);
+    assert.deepStrictEqual(
+      threw,
+      [],
+      `requestRoutedUrl threw for: ${threw.map(r => `${r.label} (${r.error})`).join(', ')}`,
+    );
+    for (const result of results) {
+      assert.ok(
+        typeof result.href === 'string' && result.href.startsWith('http'),
+        `${result.label}: expected an absolute http(s) URL, got ${result.href}`,
+      );
+    }
+  });
+
   it('agrees with what the renderer actually routes on (the anti-drift guarantee)', async () => {
     const cases = [
       ['/', undefined],
@@ -248,22 +367,44 @@ describe('requestRoutedUrl (the exported helper consumers must not reimplement)'
       // Repeated query keys: webapp's categorization keeps only the last value.
       // The point is not which value wins, it is that both sides agree.
       ['/events/e1?a=1&a=2&b=3', undefined],
+      // Encoding survivals the two sides could plausibly disagree about.
+      ['/events/e1?a=b%20c&flag', undefined],
+      ['/x/../pricing', undefined],
+      ['/./pricing', undefined],
+      ['/', { Host: '999.999.999.999' }],
+      ['/', { Host: 'not a host' }],
+      ['/pricing', { 'X-Forwarded-Proto': 'https, http' }],
+      ['/pricing', { Host: 'evil.example' }],
     ];
 
     for (const [target, headers] of cases) {
+      const label = `${target} ${JSON.stringify(headers || {})}`;
       const helper = await probe(target, headers);
       const rendered = await render(target, headers);
       const renderedPath = marker(rendered.body, 'routed-pathname');
       const renderedSearch = marker(rendered.body, 'routed-search');
+      const renderedUrl = marker(rendered.body, 'loader-url');
       assert.strictEqual(
         helper.pathname,
         renderedPath,
-        `helper said "${helper.pathname}" but the renderer routed "${renderedPath}" for ${target} ${JSON.stringify(headers || {})}`,
+        `helper said "${helper.pathname}" but the renderer routed "${renderedPath}" for ${label}`,
       );
       assert.strictEqual(
         helper.search,
         renderedSearch,
-        `helper said search "${helper.search}" but the renderer routed "${renderedSearch}" for ${target}`,
+        `helper said search "${helper.search}" but the renderer routed "${renderedSearch}" for ${label}`,
+      );
+      // Origin too: a consumer building an absolute URL from the helper must
+      // get the same origin the renderer hands to loaders.
+      assert.strictEqual(
+        helper.origin,
+        new URL(renderedUrl).origin,
+        `helper said origin "${helper.origin}" but the renderer routed "${renderedUrl}" for ${label}`,
+      );
+      assert.strictEqual(
+        helper.href,
+        renderedUrl,
+        `helper href "${helper.href}" !== renderer "${renderedUrl}" for ${label}`,
       );
     }
   });
