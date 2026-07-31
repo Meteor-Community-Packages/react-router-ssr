@@ -84,6 +84,55 @@ the whole `<html>` document, so there is no mount element to configure.
 
 **`useSubscribeSuspense(name, ...args)`** - A server enabled version of `react-meteor-data`'s suspendable `useSubscribe` hook. Arguments are same as `Meteor.subscribe`.
 
+**`requestRoutedUrl(req)`** *(server only)* - The URL the renderer will route on for a given
+request. See [below](#requestroutedurlreq).
+
+### `requestRoutedUrl(req)`
+
+Returns the WHATWG [`URL`](https://developer.mozilla.org/en-US/docs/Web/API/URL) that this
+package hands to React Router for `req`. Server only. Never throws.
+
+```js
+import { WebApp } from "meteor/webapp";
+import { requestRoutedUrl } from "meteor/communitypackages:react-router-ssr";
+
+WebApp.handlers.use((req, res, next) => {
+  const url = requestRoutedUrl(req);        // e.g. https://app.example.com/events/abc?tab=schedule
+
+  if (url.pathname.startsWith("/admin") && !isAdmin(req)) {
+    res.writeHead(302, { Location: "/login" });
+    res.end();
+    return;
+  }
+
+  next();
+});
+```
+
+It accepts both request shapes:
+
+- a **raw** connect/express request, as your middleware sees it — webapp has not categorized it
+  yet, so the helper reproduces categorization itself (dropping the `#fragment` and stripping a
+  leading `/__<arch>` segment);
+- an **already-categorized** webapp request, as passed to boilerplate data callbacks.
+
+#### Why you should not reimplement this
+
+Deriving the routed URL looks like two lines of string handling, and it is not. It has to pick
+the pathname out of three different request shapes webapp has used over time, reproduce
+webapp's own categorization, keep the query string, and — most importantly — refuse to let the
+client-supplied `Host` and `X-Forwarded-Proto` headers put a path into the URL. Getting that
+last part wrong is not a cosmetic bug: it lets any client choose which route your server
+renders (this package shipped exactly that bug through 7.0.1; see the
+[changelog](CHANGELOG.md#710)).
+
+A hand-written copy in an app also *drifts*. If your middleware decides on one pathname and the
+renderer routes another, you get authorization checks and redirects that apply to a different
+URL than the one that is actually rendered — a class of bug that survives code review because
+both halves look correct in isolation. `createFetchRequest` inside this package calls
+`requestRoutedUrl` too, so calling it from your app is the only way to be sure you are asking
+the same question the renderer answers.
+
 ## Usage
 
 This package renders and hydrates the **entire `<html>` document** — it produces its own
@@ -184,3 +233,34 @@ exist for that to work: **keep the `static-html` package and a `client/main.html
 `<head></head>` is enough. Everything else in that file is replaced by the rendered document,
 so don't put content there; manage the head from your components instead (see
 [Managing the document head](#managing-the-document-head)).
+
+## Running the tests
+
+The suite lives in a small Meteor application under `tests/app/`, which resolves this package
+from the checkout through the symlink at `tests/app/packages/react-router-ssr`. `meteor
+test-packages` cannot be used here: React Router 7/8 is not (and deliberately cannot be) an
+`Npm.depends` of this package, so the tests need a real app to inject it.
+
+```sh
+cd tests/app
+meteor npm install     # once
+meteor npm test
+```
+
+That runs:
+
+```sh
+TEST_CLIENT=0 TEST_SERVER=1 meteor test --full-app --once \
+  --port 3737 --driver-package meteortesting:mocha
+```
+
+Every test drives a real socket → real webapp → real `renderWithSSR` → real React Router, and
+asserts on the route that actually matched, because the bugs these cover are invisible to a
+unit test of an exported function. Hostile requests are written as raw bytes, since `fetch` and
+`http.request` both refuse to send a `Host` header containing `/`.
+
+> **Note:** a Meteor boot failure prints `0 passing` with no failures, which reads as green.
+> Always check the *count* — as of 7.1.0 the suite is **45 passing**.
+
+`meteor test` and a running dev server cannot share the app directory, so stop one before
+starting the other.

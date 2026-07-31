@@ -1,0 +1,4 @@
+node_modules/
+# Self-referential symlink used to resolve this checkout from the test app;
+# walking it recurses forever (ELOOP).
+tests/app/packages/

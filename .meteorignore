@@ -1,0 +1,6 @@
+# The test application under tests/ is not part of the published package.
+# Meteor's package source walk (unlike an app's) does not exclude tests/ by
+# default, so without this the whole test app — and the self-referential
+# packages/ symlink it uses to resolve this checkout — would be scanned and
+# bundled into the isopack.
+tests/

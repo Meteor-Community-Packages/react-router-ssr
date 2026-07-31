@@ -7,7 +7,8 @@ import { Writable } from 'stream';
 import React, { StrictMode } from 'react';
 import { renderToPipeableStream } from 'react-dom/server';
 import AbortController from 'abort-controller';
-import { isAppUrl, requestPathname } from './helpers';
+import { isAppUrl } from './helpers';
+import { requestRoutedUrl } from './request-url';
 import { resolveReactRouter } from './resolve-react-router';
 
 // This import just silences warnings from the check-npm-versions package because the
@@ -16,6 +17,7 @@ import 'react-dom';
 import './version-check';
 
 export * from './both';
+export { requestRoutedUrl } from './request-url';
 
 // React Router is provided by the app (dependency injection) rather than imported here — see
 // the note in client.jsx and the README for why.
@@ -32,6 +34,7 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
 
   FastRender.onPageLoadWithoutSink(async (request, data, arch, response) => {
     if (!isAppUrl(request)) {
+      endDeclinedRequest(response);
       return;
     }
 
@@ -175,6 +178,37 @@ const renderWithSSR = async (routes, { reactRouter } = {}) => {
   });
 };
 
+// Answer a request the renderer has declined.
+//
+// By the time a boilerplate data callback runs, webapp has already committed to
+// serving app HTML for this request: nothing downstream will handle it, and
+// `disableBoilerplateResponse()` (called above, unavoidably global) means webapp
+// will never write a body of its own. Returning without responding therefore
+// left the socket open forever — one held connection per request, unauthenticated,
+// so `GET /__cordova/x` was trivial socket exhaustion. Since the URL is one this
+// package has explicitly refused to render, 404 is the honest answer.
+//
+// webapp still calls `res.writeHead()` after the data callbacks return;
+// fast-render guards that call once the response has been sent, so ending here
+// is safe.
+const DECLINED_BODY = 'Not Found';
+
+function endDeclinedRequest (response) {
+  if (!response || response.writableEnded) {
+    return;
+  }
+
+  if (!response.headersSent) {
+    response.statusCode = 404;
+    response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    response.setHeader('Content-Length', Buffer.byteLength(DECLINED_BODY));
+    // Nothing here is a real resource; don't let a proxy or CDN remember it.
+    response.setHeader('Cache-Control', 'no-store');
+  }
+
+  response.end(DECLINED_BODY);
+}
+
 function createFetchRequest (request) {
   const sinkHeaders = request.headers;
 
@@ -200,37 +234,12 @@ function createFetchRequest (request) {
     signal: controller.signal,
   };
 
-  // Pathname + query across webapp request shapes (see helpers.js):
-  // categorized requests carry a parsed `url.query` object; legacy and
-  // raw shapes carry search on the URL itself.
-  const pathname = requestPathname(request);
-  let search = '';
-  if (request.url && typeof request.url === 'object' && request.url.query) {
-    const qs = new URLSearchParams(request.url.query).toString();
-    search = qs ? `?${qs}` : '';
-  } else if (typeof request.url === 'string') {
-    search = new URL(request.url, 'http://localhost').search;
-  } else if (request.url && typeof request.url.search === 'string') {
-    search = request.url.search;
-  }
-
-  const baseUrl = getBaseUrlFromHeaders(sinkHeaders);
-  const fullUrl = `${baseUrl}${pathname}${search}`;
-  const newUrl = new URL(fullUrl);
-  return new Request(newUrl, init);
-};
-
-const getBaseUrlFromHeaders = headers => {
-  // `x-forwarded-proto` is only present when a proxy sets it (Meteor's dev proxy, Galaxy's
-  // load balancer, etc.). When the app server is reached directly — a production bundle run
-  // with `node main.js`, or a platform health check — it's absent. Falling back to a
-  // protocol-relative base (`//host`) makes `new URL()` throw "Invalid URL", which 500s every
-  // SSR request (and fails the deploy's health check). Default to 'http'; a comma-separated
-  // value (chained proxies) uses the first hop. Only the host/pathname matter to the router.
-  const forwardedProto = headers['x-forwarded-proto'];
-  const protocol = (forwardedProto ? forwardedProto.split(',')[0].trim() : '') || 'http';
-  const { host } = headers;
-  return `${protocol}://${host}`;
+  // The URL React Router routes on. Derived by the exported `requestRoutedUrl`
+  // helper so that there is exactly one implementation of this — the same one
+  // consumers call from their own middleware. It validates the header-derived
+  // origin and composes the path via URL setters rather than string
+  // concatenation; see request-url.js for why both halves of that matter.
+  return new Request(requestRoutedUrl(request), init);
 };
 
 export { renderWithSSR };

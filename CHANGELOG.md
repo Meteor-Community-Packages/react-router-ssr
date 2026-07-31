@@ -1,5 +1,92 @@
 # Change Log
 
+## 7.1.0
+
+A security fix, a denial-of-service fix, and one new export. **All 7.0.x users should
+upgrade.**
+
+### Security
+
+- **Any client could choose which route the server rendered, on every route, in every app
+  using 7.0.x (and 6.x).** The URL handed to React Router was built by string-concatenating
+  request headers:
+
+  ```js
+  `${headers['x-forwarded-proto']}://${headers.host}${pathname}${search}`
+  ```
+
+  Neither header was validated, so a client could close the origin early and append its own
+  path. `new URL()` then parsed the result and the injected path won:
+
+  ```http
+  GET /events/some-event HTTP/1.1
+  Host: app.example.com
+  X-Forwarded-Proto: http://app.example.com/pricing#
+  ```
+
+  The `#` swallowed the real pathname as a fragment, so the server rendered `/pricing` while
+  the client had asked for `/events/some-event`. `Host: app.example.com/pricing` does the same
+  thing, as do backslash and percent-encoded spellings (`/%70ricing`).
+
+  **What an attacker controls:** the `X-Forwarded-Proto` and `Host` request headers.
+  **What they get:** the pathname the server-side router matches — for *any* request target,
+  including authenticated and tokenised URLs. The server-rendered document, its status code,
+  and anything a route loader derives from `request.url` all come from the injected path.
+  **Who is affected:** every route of every app on 7.0.x or 6.x. A reverse proxy is **not** a
+  mitigation: `x-forwarded-proto` was read as the *first* comma-separated hop, which under the
+  usual appending-proxy configuration is the value the client supplied. If a cache sits in
+  front of the app, this is also a cache-poisoning primitive.
+
+  Fixed in two independent ways, either of which stops the routing attack on its own:
+
+  1. The scheme and authority derived from headers are now validated. The scheme must be
+     `http` or `https`; the host must be a plausible authority (registered name or bracketed
+     IPv6 literal, optional port) containing none of `/`, `\`, `#`, `?`, `@`, whitespace or
+     control characters. An unusable `Host` falls back to the app's own `ROOT_URL` host
+     (`Meteor.absoluteUrl()`), and finally to `localhost`.
+  2. The URL is no longer assembled by concatenation. The validated origin is parsed first and
+     the path and query are applied with the `URL` object's `pathname`/`search` setters, which
+     cannot reach the origin and percent-encode anything that would otherwise re-parse.
+
+### Fixed
+
+- **Unauthenticated denial of service: `GET /__cordova/<anything>` hung the socket forever.**
+  Unless a mobile platform has been added, `web.cordova` is not in `clientPrograms`, so webapp
+  does not strip the `/__cordova` segment and the package's `isAppUrl()` declines the request.
+  The render callback then returned without responding — and because
+  `WebAppInternals.disableBoilerplateResponse()` is in effect, webapp never sends a body
+  either. Nothing ended the response, so every such request pinned a connection until the
+  socket timeout: trivial socket exhaustion, no authentication required. The same held for any
+  other path `isAppUrl()` declines that still reaches the render callback, such as
+  `/app.manifest?v=2`. Declined requests are now answered with `404 Not Found` and
+  `Cache-Control: no-store`.
+- **`GET /__browser` (no trailing slash) returned a 500.** webapp's `categorizeRequest` strips
+  the `/__browser` segment and leaves an *empty* pathname, and `RoutePolicy.classify('')`
+  throws `url must be a relative URL:`. An empty or non-absolute pathname is now normalised to
+  `/`, so the URL renders the root route like `/__browser/` always did.
+
+### Added
+
+- **`requestRoutedUrl(req)`** (server export) — returns the WHATWG `URL` this package's
+  renderer will route on for a given request. Accepts a raw connect/express request (as seen
+  in `WebApp.handlers` middleware, where webapp has not categorized the request yet) as well
+  as an already-categorized webapp request, and reproduces webapp's categorization — fragment
+  removal and `/__<arch>` stripping — when needed. `createFetchRequest` now uses this same
+  function, so there is exactly one implementation of the derivation.
+
+  This exists because consumer middleware that needs the routed path *before* the renderer
+  runs was hand-mirroring the algorithm, and the copy drifted from the package. See
+  [the README](README.md#requestroutedurlreq) — please do not reimplement it.
+
+### Misc
+
+- The package now has a test suite: a small Meteor app under `tests/app/` that drives real
+  HTTP requests (written as raw bytes onto a socket, so hostile `Host` headers survive) all
+  the way through webapp, `renderWithSSR` and React Router, and asserts on the route that
+  actually matched. See [Running the tests](README.md#running-the-tests).
+- `webapp` and `routepolicy` are now declared explicitly in `package.js` instead of being
+  relied on transitively.
+
 ## 7.0.1
 
 Compatibility fixes for Meteor 3.5 (webapp 2.2.0) and the Rspack bundler. No API changes.

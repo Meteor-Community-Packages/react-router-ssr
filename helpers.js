@@ -7,6 +7,25 @@ import { RoutePolicy } from 'meteor/routepolicy';
 // (`path`), legacy parsed URL (`url.pathname`), and raw connect
 // (`url` as a string).
 export const requestPathname = function requestPathname (req) {
+  return normalize(rawPathname(req));
+};
+
+// webapp's `categorizeRequest` strips a leading `/__<arch>` segment, so a
+// request for `/__browser` (no trailing slash) arrives here with an *empty*
+// pathname. That is not a relative URL: `RoutePolicy.classify('')` throws
+// "url must be a relative URL:", which surfaced as a 500 on every request to
+// that URL. An empty (or non-absolute) pathname means the site root.
+const normalize = function normalize (pathname) {
+  if (typeof pathname !== 'string' || pathname === '') {
+    return '/';
+  }
+  return pathname.startsWith('/') ? pathname : `/${pathname}`;
+};
+
+const rawPathname = function rawPathname (req) {
+  if (!req) {
+    return '/';
+  }
   if (typeof req.path === 'string') {
     return req.path;
   }

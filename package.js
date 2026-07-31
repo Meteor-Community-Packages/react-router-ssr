@@ -2,7 +2,7 @@
 
 Package.describe({
   name: 'communitypackages:react-router-ssr',
-  version: '7.0.1',
+  version: '7.1.0',
   summary: 'Simple isomorphic React SSR for Meteor with subscribed data re-hydration',
   git: 'https://github.com/Meteor-Community-Packages/react-router-ssr.git',
   documentation: 'README.md',
@@ -22,6 +22,11 @@ Package.onUse(function _ (api) {
     'communitypackages:inject-data@3.0.0',
     'tmeasday:check-npm-versions@2.0.0',
   ]);
+
+  // Used by the server half only (request categorization and route policy).
+  // Both were previously relied on transitively; declared explicitly now that
+  // request-url.js depends on webapp directly.
+  api.use(['webapp', 'routepolicy'], 'server');
 
   api.mainModule('client.jsx', 'client');
   api.mainModule('server.jsx', 'server');

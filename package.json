@@ -3,6 +3,7 @@
   "version": "4.0.0",
   "scripts": {
     "lint": "./node_modules/.bin/eslint ./ && ./node_modules/.bin/markdownlint ./",
+    "test": "cd tests/app && meteor npm test",
     "publish-release": "rimraf ./node_modules && meteor publish && meteor npm i --only=dev",
     "pre-commit": "lint-staged",
     "prepare": "husky install"
@@ -46,6 +47,16 @@
       "react/prop-types": 0,
       "react/display-name": 0
     },
+    "overrides": [
+      {
+        "files": [
+          "tests/app/**/*.app-tests.js"
+        ],
+        "env": {
+          "mocha": true
+        }
+      }
+    ],
     "parser": "@babel/eslint-parser",
     "parserOptions": {
       "requireConfigFile": false

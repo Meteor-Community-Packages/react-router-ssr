@@ -1,0 +1,10 @@
+# Minimal app used only by this package's test suite (see ../../README.md#running-the-tests).
+meteor-base
+static-html
+ecmascript
+es5-shim
+shell-server
+
+communitypackages:react-router-ssr
+
+meteortesting:mocha
