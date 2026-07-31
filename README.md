@@ -28,6 +28,19 @@ This project, like all of the projects maintained by the Meteor Community Packag
    meteor add communitypackages:react-router-ssr
    ```
 
+### Which Meteor versions this actually works on
+
+> ⚠️ **`package.js` declares `api.versionsFrom('METEOR@3.0.1')`, but that floor does not
+> work — and has not since before 7.1.0.** On METEOR@3.0.1 (webapp 2.0.4) `renderWithSSR`
+> renders no app markup at all; the test suite reports 23 passing / 50 failing there on
+> 7.1.0, and 5 passing / 68 failing on 7.0.1.
+>
+> **Verified working: Meteor 3.4.1 (webapp 2.1.2) and Meteor 3.5 (webapp 2.2.0)** — the suite
+> is 80 passing on both. The true minimum is somewhere above 3.0.1 and at or below 3.4.1; it
+> has not been pinned down because the intermediate releases could not be built for testing.
+> If you are on 3.1–3.3, test before relying on it. The declared floor is left unchanged
+> rather than raised to a number that is equally unmeasured.
+
 ## Upgrading from v6
 
 v7 adds React Router 7 and 8 support (v6 supported React Router 6) and changes how React Router
@@ -83,6 +96,129 @@ the whole `<html>` document, so there is no mount element to configure.
   ```
 
 **`useSubscribeSuspense(name, ...args)`** - A server enabled version of `react-meteor-data`'s suspendable `useSubscribe` hook. Arguments are same as `Meteor.subscribe`.
+
+**`requestRoutedUrl(req)`** *(server only)* - The URL the renderer will route on for a given
+request. See [below](#requestroutedurlreq).
+
+### `requestRoutedUrl(req)`
+
+Returns the WHATWG [`URL`](https://developer.mozilla.org/en-US/docs/Web/API/URL) that this
+package hands to React Router for `req`. Server only. Does not throw for any input.
+
+```js
+import { WebApp } from "meteor/webapp";
+import { requestRoutedUrl } from "meteor/communitypackages:react-router-ssr";
+
+WebApp.handlers.use((req, res, next) => {
+  // pathname/search come from the request target and are trustworthy.
+  // The ORIGIN comes from the client's Host header and is NOT — see below.
+  const url = requestRoutedUrl(req);
+
+  if (url.pathname.startsWith("/admin") && !isAdmin(req)) {
+    res.writeHead(302, { Location: "/login" });   // a path, not url.origin + …
+    res.end();
+    return;
+  }
+
+  next();
+});
+```
+
+It accepts both request shapes:
+
+- a **raw** connect/express request, as your middleware sees it — webapp has not categorized it
+  yet, so the helper reproduces categorization itself (dropping the `#fragment` and stripping a
+  leading `/__<arch>` segment);
+- an **already-categorized** webapp request, as passed to boilerplate data callbacks.
+
+#### What each part of the returned URL is worth
+
+| part | trust | |
+| --- | --- | --- |
+| `pathname` | trustworthy | may legitimately begin with `//` — see below |
+| `search` | trustworthy but **normalized** | a re-serialization, not raw bytes — see below |
+| `origin`, `host`, `protocol`, `href` | **not trustworthy** | derived from client headers — see below |
+
+**`search` is a re-serialization, not the request's query string.** It is rebuilt from the
+query object webapp parsed, so `?a=b%20c&flag` comes back as `?a=b+c&flag=`. Repeated keys are
+lossy, in a webapp-version-dependent way: `?a=1&a=2` becomes `?a=2` on webapp 2.2.0 (which
+builds the object with `Object.fromEntries`) but `?a=1%2C2` on 2.1.2 (which comma-joins). That
+is faithful to what the renderer routes on — which is the whole point of this helper — but
+**never recompute a signature or HMAC over it**; read `req.url` if you need the raw bytes.
+
+#### Security: the origin is client-supplied, by design
+
+**`pathname` is trustworthy. `origin`, `host` and `href` are not.**
+
+This package deliberately derives the origin from the request's `Host` and `X-Forwarded-Proto`
+headers, because host-routed multi-tenant apps have to be able to see which host was asked
+for. Since 7.1.0 those headers can no longer inject a *path* (see the
+[changelog](CHANGELOG.md#710)), but a syntactically valid host is still taken at face value:
+
+```http
+GET /events/e1 HTTP/1.1
+Host: evil.example
+```
+
+gives a URL whose host is `evil.example` — and the same value reaches `request.url` inside
+your React Router loaders and actions. Treat it as attacker input:
+
+- **Do not redirect to an absolute URL built from it.** React Router's common idiom
+  `redirect(new URL("/login", request.url))` becomes an open redirect to the attacker's host.
+  Redirect to a path — `redirect("/login")` — or pin the origin explicitly with
+  `new URL("/login", Meteor.absoluteUrl())`, or check the host against an allow-list first.
+- **The same applies** to canonical `<link>` tags, `og:url`, absolute asset URLs, signed
+  callback URLs and anything else derived from the origin.
+- **`pathname` can begin with `//`.** `GET //evil.example/x` legitimately routes with
+  `pathname === "//evil.example/x"`, so redirecting to a bare `url.pathname` yields a
+  protocol-relative open redirect. Prefix-check or normalise before using it as a `Location`.
+
+If your app is not host-routed, the simplest rule is to ignore the origin entirely and build
+absolute URLs from `Meteor.absoluteUrl()`.
+
+Two more things worth knowing when you assess exposure:
+
+- **`X-Forwarded-Host` is not consulted, anywhere.** The origin comes from `Host` only.
+  Honouring `X-Forwarded-Host` would hand a second, even less constrained header control of
+  the origin, so it is deliberately ignored — but that means host passthrough only works if
+  your proxy *rewrites* `Host`. Behind a proxy that keeps its own `Host` and forwards the
+  original in `X-Forwarded-Host`, your app sees the proxy's internal authority, silently. If
+  you need that value, read the header yourself and check it against your own allow-list.
+- **The scheme** comes from `X-Forwarded-Proto` when it is `http` or `https`, and otherwise
+  from your app's `ROOT_URL` — not from a hardcoded `http`. An https app behind a terminator
+  that sets no `X-Forwarded-Proto` therefore still gets `https://` URLs.
+
+#### Where the origin comes from, exactly
+
+1. **Scheme** — the first comma-separated hop of `X-Forwarded-Proto` if it is exactly `http`
+   or `https`; otherwise `ROOT_URL`'s scheme; otherwise `http`.
+2. **Host** — the `Host` header, if it is a plausible authority *and* `new URL()` accepts it.
+   "Plausible" is a conservative whitelist: a registered name of unreserved characters only
+   (`A–Z a–z 0–9 . _ ~ -`) or a bracketed IPv6 literal, with an optional numeric port. It
+   admits none of `/ \ # ? @`, whitespace or control characters — and, erring on the safe
+   side, it also rejects sub-delims, percent-encodings and IPv6 zone identifiers, which are
+   technically legal in an authority. Anything it rejects falls back to `ROOT_URL`'s host, and
+   finally to `localhost`.
+
+The path and query are then applied with the `URL` object's `pathname`/`search` setters, never
+by string concatenation, so no part of the path can reach the authority.
+
+#### Why you should not reimplement this
+
+Deriving the routed URL looks like two lines of string handling, and it is not. It has to pick
+the pathname out of three different request shapes webapp has used over time, reproduce
+webapp's own categorization, keep the query string, and — most importantly — refuse to let the
+client-supplied `Host` and `X-Forwarded-Proto` headers put a path into the URL. Getting that
+last part wrong is not a cosmetic bug: it lets any client choose which route your server
+renders (this package shipped exactly that bug through 7.0.1; see the
+[changelog](CHANGELOG.md#710)).
+
+A hand-written copy in an app also *drifts*. If your middleware decides on one pathname and the
+renderer routes another, you get authorization checks and redirects that apply to a different
+URL than the one that is actually rendered — a class of bug that survives code review because
+both halves look correct in isolation. `createFetchRequest` inside this package calls
+`requestRoutedUrl` too, so calling it from your app is the only way to be sure you are asking
+the same question the renderer answers.
 
 ## Usage
 
@@ -184,3 +320,58 @@ exist for that to work: **keep the `static-html` package and a `client/main.html
 `<head></head>` is enough. Everything else in that file is replaced by the rendered document,
 so don't put content there; manage the head from your components instead (see
 [Managing the document head](#managing-the-document-head)).
+
+## Running the tests
+
+The suite lives in a small Meteor application under `tests/app/`, which resolves this package
+from the checkout through the symlink at `tests/app/packages/react-router-ssr`. `meteor
+test-packages` cannot be used here: React Router 7/8 is not (and deliberately cannot be) an
+`Npm.depends` of this package, so the tests need a real app to inject it.
+
+```sh
+cd tests/app
+meteor npm install     # once
+meteor npm test
+```
+
+That runs:
+
+```sh
+TEST_CLIENT=0 TEST_SERVER=1 meteor test --full-app --once \
+  --port 3737 --driver-package meteortesting:mocha
+```
+
+Every test starts from a real socket, because the bugs they cover are invisible to a unit test
+of an exported function. Hostile requests are written as raw bytes, since `fetch` and
+`http.request` both refuse to send a `Host` header containing `/`.
+
+Most tests then go all the way through webapp → `renderWithSSR` → React Router and assert on
+the route that actually matched. The `requestRoutedUrl` tests are different: they call the
+export from `WebApp.handlers` middleware — the way a consumer does — and terminate there
+without reaching the renderer. A dedicated cross-check drives both paths for the same targets
+and asserts they agree on pathname, search, origin and href, which is what makes the middleware
+tests meaningful.
+
+> **Note:** a Meteor boot failure prints `0 passing` with no failures, which reads as green.
+> Always check the *count* — as of 7.1.0 the suite is **80 passing**.
+
+### What the suite does not cover
+
+- **Nothing on the client.** `TEST_CLIENT=0` is hard-coded in the script, so hydration,
+  `hydrateRoot(document, …)`, client-side navigation and the `useSubscribeSuspense` client path
+  are all unexercised; `TEST_CLIENT=1` would need a browser driver package that is not
+  installed. Server rendering, request handling and URL derivation are covered; hydration is
+  not.
+- **Only recent Meteor releases.** The suite is run on **Meteor 3.5** (webapp 2.2.0) and
+  **Meteor 3.4.1** (webapp 2.1.2) — 80 passing on both, which is what gives the
+  webapp-version-dependent query behaviour described above real coverage.
+
+  ⚠️ **`package.js` declares `api.versionsFrom('METEOR@3.0.1')`, and that floor does not
+  work.** On METEOR@3.0.1 (webapp 2.0.4) `renderWithSSR` renders no app markup at all: the
+  suite reports 23 passing / 50 failing on 7.1.0, and 5 passing / 68 failing on 7.0.1, so this
+  predates 7.1.0 rather than being caused by it. The true minimum lies somewhere above 3.0.1
+  and at or below 3.4.1; it has not been pinned down, because the intermediate releases could
+  not be built in this environment. Treat 3.4.1 as the lowest *verified* release.
+
+`meteor test` and a running dev server cannot share the app directory, so stop one before
+starting the other.

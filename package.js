@@ -2,7 +2,7 @@
 
 Package.describe({
   name: 'communitypackages:react-router-ssr',
-  version: '7.0.1',
+  version: '7.1.0',
   summary: 'Simple isomorphic React SSR for Meteor with subscribed data re-hydration',
   git: 'https://github.com/Meteor-Community-Packages/react-router-ssr.git',
   documentation: 'README.md',
@@ -22,6 +22,13 @@ Package.onUse(function _ (api) {
     'communitypackages:inject-data@3.0.0',
     'tmeasday:check-npm-versions@2.0.0',
   ]);
+
+  // Imported by helpers.js / request-url.js, which are server-side concerns —
+  // but Meteor adds every file in a package directory to *every* unibuild as a
+  // lazy module, so those files ship in the client unibuild too. Declared
+  // unqualified so the dependency declaration matches the files actually
+  // shipped. (Both were previously relied on transitively.)
+  api.use(['webapp', 'routepolicy']);
 
   api.mainModule('client.jsx', 'client');
   api.mainModule('server.jsx', 'server');

@@ -1,0 +1,16 @@
+# Nothing here is part of the published package.
+#
+# Meteor's package source walk (unlike an app's) excludes NEITHER of these by
+# default, and every file it finds is added to the isopack as a lazy module.
+# Without these entries the built isopack is roughly 150 MB and 167 source
+# resources, instead of well under a megabyte and the 7 files this package
+# actually ships.
+
+# Dev-only tooling (eslint, markdownlint, husky). Only the `publish-release`
+# npm script's `rimraf ./node_modules` kept this out of releases before — a
+# procedural guard on an irreversible action.
+node_modules/
+
+# The test application, including the self-referential packages/ symlink it
+# uses to resolve this checkout.
+tests/
